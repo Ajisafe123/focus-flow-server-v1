@@ -24,3 +24,4 @@ plyer
 pytz
 pygame
 pydantic[email]
+aiosmtplib
