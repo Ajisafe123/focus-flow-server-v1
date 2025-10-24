@@ -28,37 +28,19 @@ async def log_exceptions(request, call_next):
         traceback.print_exc()
         raise e
 
-# --- FIXED CORS HANDLING ---
-origins = settings.BACKEND_CORS_ORIGINS
-
-# Ensure origins is a list
-if isinstance(origins, str):
-    # Handle JSON-style list in .env, or single string
-    try:
-        import json
-        origins = json.loads(origins)
-        if not isinstance(origins, list):
-            origins = [origins]
-    except Exception:
-        origins = [origins]
-
-# Ensure localhost is always allowed
-if "http://localhost:5173" not in origins:
-    origins.append("http://localhost:5173")
-if "http://127.0.0.1:5173" not in origins:
-    origins.append("http://127.0.0.1:5173")
-
-logging.info(f"CORS origins loaded: {origins}")
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Static files setup ---
 BASE_DIR = os.path.dirname(__file__)
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 UPLOAD_DIR = os.path.join(STATIC_DIR, "uploads")
@@ -69,7 +51,6 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# --- Routers ---
 app.include_router(auth_routes.router)
 app.include_router(prayer_routes.router)
 app.include_router(allah_names.router)
@@ -79,7 +60,6 @@ app.include_router(calendar.router)
 app.include_router(hadith.router)
 app.include_router(duas.router)
 
-# --- Root & Health Routes ---
 @app.get("/")
 async def read_root():
     return {"message": "Welcome to Focus Flow API (Prayer + Auth)"}
@@ -88,7 +68,6 @@ async def read_root():
 async def health_check():
     return {"status": "healthy"}
 
-# --- Startup & Shutdown ---
 @app.on_event("startup")
 async def on_startup():
     logging.info("Starting Focus Flow API...")
