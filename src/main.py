@@ -35,7 +35,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "https://focus-flow-client-v1.onrender.com",
+        "https://nibra-al-deen-v1.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
