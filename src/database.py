@@ -7,11 +7,15 @@ DATABASE_URL = settings.DATABASE_URL
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=5,
+    pool_timeout=30,
     connect_args={
         "server_settings": {
             "client_encoding": "utf8"
         }
-    }
+    },
 )
 
 async_session_maker = sessionmaker(
@@ -29,4 +33,3 @@ async def get_db() -> AsyncSession:
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-async_session = async_session_maker
