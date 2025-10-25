@@ -30,7 +30,7 @@ async def log_exceptions(request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://nibra-al-deen-v1.vercel.app", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,7 +57,7 @@ app.include_router(duas.router)
 
 @app.get("/")
 async def read_root():
-    return {"message": "Welcome to Focus Flow API (Prayer + Auth)"}
+    return {"message": "Welcome to Focus Flow API"}
 
 @app.get("/health")
 async def health_check():
