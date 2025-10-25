@@ -19,6 +19,14 @@ app = FastAPI(
     debug=(settings.ENVIRONMENT == "development"),
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://nibra-al-deen-v1.vercel.app", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.middleware("http")
 async def log_exceptions(request, call_next):
     try:
@@ -27,14 +35,6 @@ async def log_exceptions(request, call_next):
         logging.error("UNCAUGHT EXCEPTION", exc_info=e)
         traceback.print_exc()
         raise e
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://nibra-al-deen-v1.vercel.app", "http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 BASE_DIR = os.path.dirname(__file__)
 STATIC_DIR = os.path.join(BASE_DIR, "static")
