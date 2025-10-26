@@ -66,6 +66,8 @@ async def health_check():
 @app.on_event("startup")
 async def on_startup():
     logging.info("Starting Focus Flow API...")
+    logging.info(f"Environment: {settings.ENVIRONMENT}")
+    logging.info(f"Database URL: {settings.effective_database_url}")
     try:
         await init_db()
         data = await get_prayer_times(DEFAULT_LAT, DEFAULT_LON)

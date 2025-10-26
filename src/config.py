@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import List, Dict, Union
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -9,7 +10,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
-        extra="ignore"  
+        extra="ignore"
     )
     DATABASE_URL: str
     SECRET_KEY: str
@@ -37,5 +38,11 @@ class Settings(BaseSettings):
         {"name": "London", "lat": 51.5074, "lon": -0.1278},
         {"name": "New York", "lat": 40.7128, "lon": -74.0060},
     ]
+
+    @property
+    def effective_database_url(self) -> str:
+        if self.ENVIRONMENT.lower() == "production":
+            return self.DATABASE_URL.replace(".oregon-postgres.render.com", "")
+        return self.DATABASE_URL
 
 settings = Settings()
