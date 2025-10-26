@@ -3,14 +3,12 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from src.config import settings
 import ssl
 
-DATABASE_URL = settings.effective_database_url
+DATABASE_URL = settings.effective_database_url.strip()
 
-connect_args = {
-    "server_settings": {
-        "client_encoding": "utf8"
-    }
-}
+if "sslmode" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.split("?")[0]
 
+connect_args = {"server_settings": {"client_encoding": "utf8"}}
 if "render.com" in DATABASE_URL:
     ssl_context = ssl.create_default_context()
     connect_args["ssl"] = ssl_context
