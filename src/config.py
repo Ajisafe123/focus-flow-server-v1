@@ -40,9 +40,11 @@ class Settings(BaseSettings):
     ]
 
     @property
-    def effective_database_url(self) -> str:
-        if self.ENVIRONMENT.lower() == "production":
-            return self.DATABASE_URL.replace(".oregon-postgres.render.com", "")
-        return self.DATABASE_URL
+    
+    def effective_database_url(self) -> str: 
+       url = self.DATABASE_URL
+       if self.ENVIRONMENT.lower() == "production" and "sslmode" not in url:
+           url += "?sslmode=require"
+       return url
 
 settings = Settings()
