@@ -4,6 +4,12 @@ from src.config import settings
 
 DATABASE_URL = settings.effective_database_url
 
+if "ssl=require" not in DATABASE_URL:
+    if "?" in DATABASE_URL:
+        DATABASE_URL += "&ssl=require"
+    else:
+        DATABASE_URL += "?ssl=require"
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
