@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
 from ..database import get_db
@@ -112,3 +112,11 @@ async def reset_password(req: ResetPasswordRequest, db: AsyncSession = Depends(g
     user.hashed_password = get_password_hash(req.new_password)
     await db.commit()
     return {"message": "Password reset successfully"}
+
+@router.post("/debug")
+async def debug_body(request: Request):
+    try:
+        data = await request.json()
+        return {"received": data}
+    except Exception as e:
+        return {"error": str(e)}
