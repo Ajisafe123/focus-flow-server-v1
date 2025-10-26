@@ -1,14 +1,19 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from src.config import settings
+import ssl
 
 DATABASE_URL = settings.effective_database_url
 
-if "ssl=require" not in DATABASE_URL:
-    if "?" in DATABASE_URL:
-        DATABASE_URL += "&ssl=require"
-    else:
-        DATABASE_URL += "?ssl=require"
+connect_args = {
+    "server_settings": {
+        "client_encoding": "utf8"
+    }
+}
+
+if "render.com" in DATABASE_URL:
+    ssl_context = ssl.create_default_context()
+    connect_args["ssl"] = ssl_context
 
 engine = create_async_engine(
     DATABASE_URL,
@@ -17,11 +22,7 @@ engine = create_async_engine(
     pool_size=10,
     max_overflow=5,
     pool_timeout=30,
-    connect_args={
-        "server_settings": {
-            "client_encoding": "utf8"
-        }
-    },
+    connect_args=connect_args,
 )
 
 async_session_maker = sessionmaker(
