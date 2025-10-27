@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -95,9 +95,15 @@ async def update_user_account(db: AsyncSession, user_id: int, update_data: UserU
 def generate_reset_code():
     return str(random.randint(100000, 999999))
 
-async def create_reset_code(db: AsyncSession, user: User):
+RESET_CODE_EXPIRE_MINUTES = 15
+
+def generate_reset_code() -> str:
+    return str(random.randint(100000, 999999))
+
+async def create_reset_code(db: AsyncSession, user: User) -> str:
     code = generate_reset_code()
-    reset_entry = PasswordResetCode(user_id=user.id, code=code)
+    expires_at = datetime.utcnow() + timedelta(minutes=RESET_CODE_EXPIRE_MINUTES)
+    reset_entry = PasswordResetCode(user_id=user.id, code=code, expires_at=expires_at)
     db.add(reset_entry)
     await db.commit()
     await db.refresh(reset_entry)
@@ -108,15 +114,15 @@ async def verify_reset_code(db: AsyncSession, email: str, code: str) -> User:
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
     res = await db.execute(
-        select(PasswordResetCode).filter(
-            PasswordResetCode.user_id == user.id,
-            PasswordResetCode.code == code
-        )
+        select(PasswordResetCode)
+        .filter(PasswordResetCode.user_id == user.id, PasswordResetCode.code == code)
     )
     reset_code = res.scalars().first()
     if not reset_code:
         raise HTTPException(status_code=400, detail="Invalid code")
     if reset_code.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Code expired")
+
     return user

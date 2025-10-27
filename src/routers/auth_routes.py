@@ -96,7 +96,6 @@ async def forgot_password(req: ForgotPasswordRequest, db: AsyncSession = Depends
     user = await get_user_by_email(db, req.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
     code = await create_reset_code(db, user)
     asyncio.create_task(send_password_reset_email(req.email, code))
     return {"message": "Password reset code sent to email"}
@@ -110,13 +109,7 @@ async def verify_code(req: VerifyCodeRequest, db: AsyncSession = Depends(get_db)
 async def reset_password(req: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
     user = await verify_reset_code(db, req.email, req.code)
     user.hashed_password = get_password_hash(req.new_password)
+    db.add(user)
     await db.commit()
+    await db.refresh(user)
     return {"message": "Password reset successfully"}
-
-@router.post("/debug")
-async def debug_body(request: Request):
-    try:
-        data = await request.json()
-        return {"received": data}
-    except Exception as e:
-        return {"error": str(e)}

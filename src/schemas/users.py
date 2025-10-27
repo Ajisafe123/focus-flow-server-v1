@@ -61,8 +61,8 @@ class ResetPasswordRequest(BaseModel):
     code: constr(min_length=6, max_length=6)
     new_password: constr(min_length=8, max_length=128)
 
-    @validator("new_password")
-    def validate_new_password(cls, value):
+    @classmethod
+    def validate_password(cls, value: str):
         if not any(c.isupper() for c in value):
             raise ValueError("Password must contain at least one uppercase letter")
         if not any(c.islower() for c in value):

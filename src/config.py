@@ -39,8 +39,13 @@ class Settings(BaseSettings):
         {"name": "New York", "lat": 40.7128, "lon": -74.0060},
     ]
 
+    SMTP_HOST: str
+    SMTP_PORT: int
+    SMTP_USER: str
+    SMTP_PASSWORD: str
+    EMAIL_FROM: str
+
     @property
-    
     def effective_database_url(self) -> str: 
        url = self.DATABASE_URL
        if self.ENVIRONMENT.lower() == "production" and "sslmode" not in url:
