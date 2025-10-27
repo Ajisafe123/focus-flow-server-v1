@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .database import init_db
-from src.routers import auth_routes, prayer_routes, allah_names, calendar, qibla, zakat, hadith, duas
+from src.routers import auth_routes, prayer_routes, allah_names, calendar, qibla, zakat, hadith, duas, contact
 from src.services.prayer_service import get_prayer_times, DEFAULT_LAT, DEFAULT_LON
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -54,6 +54,7 @@ app.include_router(qibla.router)
 app.include_router(calendar.router)
 app.include_router(hadith.router)
 app.include_router(duas.router)
+app.include_router(contact.router)
 
 @app.get("/")
 async def read_root():

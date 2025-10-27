@@ -5,21 +5,17 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 
-from src.database import Base  # make sure this exists
+from src.database import Base
 from src.config import settings
 from src.models.allah_names import AllahName
 from src.models.hadith import Hadith
 from src.models.dua import Dua
-from src.models.dhikr_count import DhikrCount
 
-# Alembic Config object
 config = context.config
 
-# Logging configuration
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Target metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
 
@@ -65,7 +61,6 @@ def run_migrations_online() -> None:
     asyncio.run(run_async_migrations())
 
 
-# ✅ Run migrations depending on mode
 if context.is_offline_mode():
     run_migrations_offline()
 else:
