@@ -28,3 +28,4 @@ pydantic[email]
 aiosmtplib
 jinja2
 asyncio
+resend==0.9.0

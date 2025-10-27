@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     RESET_TOKEN_EXPIRE_MINUTES: int
     BACKEND_CORS_ORIGINS: List[str]
+    RESEND_API_KEY: str
+    EMAIL_FROM: str
     DEFAULT_LAT: float = 21.3891
     DEFAULT_LON: float = 39.8579
     DEFAULT_CITY: str = "Mecca"
@@ -38,12 +40,6 @@ class Settings(BaseSettings):
         {"name": "London", "lat": 51.5074, "lon": -0.1278},
         {"name": "New York", "lat": 40.7128, "lon": -74.0060},
     ]
-
-    SMTP_HOST: str
-    SMTP_PORT: int
-    SMTP_USER: str
-    SMTP_PASSWORD: str
-    EMAIL_FROM: str
 
     @property
     def effective_database_url(self) -> str: 

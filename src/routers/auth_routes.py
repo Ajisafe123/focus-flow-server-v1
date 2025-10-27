@@ -97,7 +97,7 @@ async def forgot_password(req: ForgotPasswordRequest, db: AsyncSession = Depends
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     code = await create_reset_code(db, user)
-    asyncio.create_task(send_password_reset_email(req.email, code))
+    await send_password_reset_email(req.email, code)
     return {"message": "Password reset code sent to email"}
 
 @router.post("/verify-code")

@@ -1,34 +1,37 @@
 import os
-import asyncio
-from aiosmtplib import send
-from email.message import EmailMessage
+import resend
 from jinja2 import Environment, FileSystemLoader
-from src.config import settings  # use absolute import to avoid relative import issues
+from src.config import settings
+
+resend.api_key = settings.RESEND_API_KEY
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "../templates/email")
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
 
 async def send_email(subject: str, recipient: str, html_content: str):
-    msg = EmailMessage()
-    msg["From"] = settings.EMAIL_FROM
-    msg["To"] = recipient
-    msg["Subject"] = subject
-    msg.set_content("This email requires HTML support.")
-    msg.add_alternative(html_content, subtype="html")
+    print(f"Sending email to {recipient} | Subject: {subject}")
 
-    await send(
-        msg,
-        hostname=settings.SMTP_HOST,
-        port=settings.SMTP_PORT,
-        username=settings.SMTP_USER,
-        password=settings.SMTP_PASSWORD,
-        start_tls=True,
-    )
+    try:
+        response = resend.Emails.send({
+            "from": f"Nibra Al-Deen <{settings.EMAIL_FROM}>",
+            "to": [recipient],
+            "subject": subject,
+            "html": html_content,
+        })
+
+        print("Resend API response:")
+        print(response)
+        return response
+
+    except Exception as e:
+        print("Error sending email:")
+        print(e)
+        raise
 
 
 async def send_password_reset_email(email: str, code: str):
     template = env.get_template("password_reset.html")
     html_content = template.render(code=code)
     subject = "Your Password Reset Code"
-    asyncio.create_task(send_email(subject, email, html_content))
+    await send_email(subject, email, html_content)
