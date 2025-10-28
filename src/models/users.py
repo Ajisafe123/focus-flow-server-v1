@@ -15,6 +15,7 @@ class User(Base):
     bio = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    role = Column(String, default="user")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     reset_sent_at = Column(DateTime, nullable=True)

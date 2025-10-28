@@ -14,7 +14,8 @@ from ..utils.users import (
     get_current_active_user,
     update_user_account,
     create_reset_code,
-    verify_reset_code
+    verify_reset_code,
+    admin_only
 )
 from ..config import settings
 
@@ -41,8 +42,19 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     if not user:
         msg = "Incorrect email or password" if "@" in credentials.identifier else "Incorrect username or password"
         raise HTTPException(status_code=401, detail=msg)
-    access_token = create_access_token(data={"sub": str(user.id)}, expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    access_token = create_access_token(
+        data={"sub": str(user.id), "role": user.role},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": user.role,
+        "username": user.username,
+        "email": user.email,
+    }
 
 @router.post("/logout")
 async def logout():
@@ -112,3 +124,7 @@ async def reset_password(req: ResetPasswordRequest, db: AsyncSession = Depends(g
     await db.commit()
     await db.refresh(user)
     return {"message": "Password reset successfully"}
+
+@router.get("/admin/dashboard")
+async def get_admin_dashboard(current_user: User = Depends(admin_only)):
+    return {"message": f"Welcome Admin {current_user.username}"}

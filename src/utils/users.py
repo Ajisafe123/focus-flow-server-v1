@@ -126,3 +126,8 @@ async def verify_reset_code(db: AsyncSession, email: str, code: str) -> User:
         raise HTTPException(status_code=400, detail="Code expired")
 
     return user
+
+async def admin_only(current_user: User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admins only")
+    return current_user

@@ -32,6 +32,7 @@ class UserResponse(BaseModel):
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
     created_at: Optional[datetime] = None
+    role: Optional[str] = "user"
 
     class Config:
         from_attributes = True
@@ -44,6 +45,7 @@ class UserUpdate(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    role: Optional[str] = "user"
 
 class UserLogin(BaseModel):
     identifier: str
