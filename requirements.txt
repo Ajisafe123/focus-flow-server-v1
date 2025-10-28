@@ -27,5 +27,3 @@ pygame
 pydantic[email]
 aiosmtplib
 jinja2
-asyncio
-resend

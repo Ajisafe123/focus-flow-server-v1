@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
 from ..database import get_db
 from ..models.users import User
 from ..schemas.users import UserCreate, UserResponse, Token, UserLogin, UserUpdate, ForgotPasswordRequest, VerifyCodeRequest, ResetPasswordRequest
 from ..services.email_service import send_password_reset_email
-import asyncio
 from ..utils.users import (
     get_password_hash,
     authenticate_user,
