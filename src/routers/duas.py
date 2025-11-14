@@ -57,7 +57,6 @@ async def redirect_to_dua_page(short_code: str, db: AsyncSession = Depends(get_d
         return RedirectResponse(url=FRONTEND_BASE_URL, status_code=307)
     
     target_url = f"{FRONTEND_BASE_URL}/?duaId={dua_id}"
-    
     return RedirectResponse(url=target_url, status_code=307)
 
 
