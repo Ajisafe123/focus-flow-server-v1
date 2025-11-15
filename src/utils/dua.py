@@ -21,6 +21,7 @@ async def create_share_link(db: AsyncSession, dua_id: int, short_code: str) -> D
     
     for attempt in range(MAX_RETRIES):
         try:
+            # FIX: A new DuaShareLink object is created for every attempt.
             new_link = DuaShareLink(dua_id=dua_id, short_code=current_short_code)
             db.add(new_link)
             await db.commit()
@@ -29,7 +30,8 @@ async def create_share_link(db: AsyncSession, dua_id: int, short_code: str) -> D
         
         except IntegrityError:
             await db.rollback()
-            current_short_code = generate_short_code()
+            # Generate a new code for the next iteration
+            current_short_code = generate_short_code() 
             continue
             
     raise Exception("Failed to generate a unique short code after 5 attempts.")
