@@ -34,7 +34,7 @@ class ShareLinkResponse(BaseModel):
     share_url: str
 
 SHARE_BASE_URL = "https://focus-flow-server-v1.onrender.com/api/s/" 
-FRONTEND_BASE_URL = "https://nibra-al-deen-v1.vercel.app" 
+FRONTEND_BASE_URL = "https://nibrasudeen.vercel.app" 
 
 @router.post("/duas/{dua_id}/share-link", response_model=ShareLinkResponse)
 async def generate_dua_share_link(dua_id: int, db: AsyncSession = Depends(get_db)):
