@@ -2,18 +2,16 @@ import asyncio
 import json
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Depends
 from typing import Dict, Optional
-from src.services import prayer_service
-from ..models.users import User
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from ..services import prayer_service
 from ..database import get_db
-from sqlalchemy.orm import Session
 from ..schemas.users import UserResponse
-from ..utils.users import get_current_active_user, get_optional_user
+from ..utils.users import get_current_user, get_optional_user
 import httpx
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/prayers", tags=["Prayers"])
 scheduler = prayer_service.Scheduler()
-USER_SETTINGS: Dict[int, Dict] = {}
+USER_SETTINGS: Dict[str, Dict] = {}
 
 DEFAULT_LAT = 7.3775
 DEFAULT_LON = 3.947
@@ -23,26 +21,28 @@ async def get_prayer_times_endpoint(
     lat: Optional[float] = Query(None),
     lon: Optional[float] = Query(None),
     method: str = Query("ISNA"),
-    db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user) 
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user = Depends(get_optional_user) 
 ):
-    
     final_lat = lat
     final_lon = lon
     
     if current_user:
-        if final_lat is None and current_user.latitude is not None:
-            final_lat = current_user.latitude
-        if final_lon is None and current_user.longitude is not None:
-            final_lon = current_user.longitude
+        if final_lat is None and current_user.get("latitude") is not None:
+            final_lat = current_user.get("latitude")
+        if final_lon is None and current_user.get("longitude") is not None:
+            final_lon = current_user.get("longitude")
             
         if lat is not None and lon is not None:
-             if current_user.latitude != lat or current_user.longitude != lon:
-                current_user.latitude = lat
-                current_user.longitude = lon
-                
-                await db.commit()
-                await db.refresh(current_user)
+            if current_user.get("latitude") != lat or current_user.get("longitude") != lon:
+                users_collection = db["users"]
+                await users_collection.update_one(
+                    {"_id": current_user.get("_id")},
+                    {"$set": {
+                        "latitude": lat,
+                        "longitude": lon
+                    }}
+                )
 
     if final_lat is None or final_lon is None:
         final_lat = DEFAULT_LAT
@@ -80,18 +80,28 @@ async def reverse_geocode_proxy(
         except httpx.RequestError as e:
             return {"error": f"An error occurred while requesting Nominatim: {e}"}, 500
 
-@router.get("/users/me", response_model=UserResponse)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
-    return current_user
+@router.get("/users/me", response_model=dict)
+async def read_users_me(current_user = Depends(get_current_user)):
+    return {
+        "id": str(current_user.get("_id")),
+        "email": current_user.get("email"),
+        "username": current_user.get("username"),
+        "role": current_user.get("role"),
+        "is_active": current_user.get("is_active"),
+        "latitude": current_user.get("latitude"),
+        "longitude": current_user.get("longitude")
+    }
 
 @router.post("/users/me/mute")
-async def mute_azan(current_user: User = Depends(get_current_active_user)):
-    USER_SETTINGS[current_user.id] = {"muted": True}
+async def mute_azan(current_user = Depends(get_current_user)):
+    user_id = str(current_user.get("_id"))
+    USER_SETTINGS[user_id] = {"muted": True}
     return {"status": "success", "muted": True}
 
 @router.post("/users/me/unmute")
-async def unmute_azan(current_user: User = Depends(get_current_active_user)):
-    USER_SETTINGS[current_user.id] = {"muted": False}
+async def unmute_azan(current_user = Depends(get_current_user)):
+    user_id = str(current_user.get("_id"))
+    USER_SETTINGS[user_id] = {"muted": False}
     return {"status": "success", "muted": False}
 
 class ConnectionManager:
@@ -117,8 +127,7 @@ class ConnectionManager:
             return
 
         try:
-            user_id_int = int(user_id) if isinstance(user_id, str) and user_id.isdigit() else user_id
-            muted = USER_SETTINGS.get(user_id_int, {}).get("muted", False)
+            muted = USER_SETTINGS.get(user_id, {}).get("muted", False)
             data["muted"] = muted
             await ws.send_json(data)
         except Exception:
@@ -141,7 +150,7 @@ async def start_broadcaster():
     asyncio.create_task(broadcaster())
 
 @router.websocket("/ws")
-async def prayer_ws(ws: WebSocket, db: AsyncSession = Depends(get_db)):
+async def prayer_ws(ws: WebSocket, db: AsyncIOMotorDatabase = Depends(get_db)):
     user_id = None
     try:
         raw = await ws.receive_text()
@@ -155,20 +164,19 @@ async def prayer_ws(ws: WebSocket, db: AsyncSession = Depends(get_db)):
         token = data.get("token")
         if token:
             try:
-                from ..utils.users import get_optional_user 
-                current_user = await get_optional_user(token, db)
+                current_user = await get_optional_user(token)
             except Exception:
-                 pass
+                pass
         
-        user_id = str(current_user.id) if current_user else f"user_{id(ws)}"
+        user_id = str(current_user.get("_id")) if current_user else f"user_{id(ws)}"
         
         lat = data.get("lat")
         lon = data.get("lon")
         
         if not lat or not lon:
-            if current_user and current_user.latitude and current_user.longitude:
-                lat = current_user.latitude
-                lon = current_user.longitude
+            if current_user and current_user.get("latitude") and current_user.get("longitude"):
+                lat = current_user.get("latitude")
+                lon = current_user.get("longitude")
             else:
                 lat = DEFAULT_LAT
                 lon = DEFAULT_LON
@@ -197,9 +205,11 @@ async def prayer_ws(ws: WebSocket, db: AsyncSession = Depends(get_db)):
             except Exception:
                 pass
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
+        if user_id:
+            manager.disconnect(user_id)
     except Exception:
         try:
-            manager.disconnect(user_id)
+            if user_id:
+                manager.disconnect(user_id)
         except:
             pass

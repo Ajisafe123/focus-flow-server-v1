@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.routers import users
 from .config import settings
+from . import database
 from .database import init_db
 from src.routers import (
     prayer_routes,
@@ -17,6 +18,7 @@ from src.routers import (
     zakat,
     hadith,
     duas,
+    articles,
     contact,
     users,
     admin,
@@ -70,6 +72,7 @@ app.include_router(qibla.router)
 app.include_router(calendar.router)
 app.include_router(hadith.router)
 app.include_router(duas.router)
+app.include_router(articles.router)
 app.include_router(contact.router)
 app.include_router(admin.router)
 app.include_router(conversation.router)
@@ -91,9 +94,10 @@ async def health_check():
 async def on_startup():
     logging.info("Starting Focus Flow API...")
     logging.info(f"Environment: {settings.ENVIRONMENT}")
-    logging.info(f"Database URL: {settings.effective_database_url}")
+    logging.info(f"Database URL: {settings.DATABASE_URL}")
     try:
-        await init_db()
+        await database.connect_to_mongo()
+        await database.init_db()
         data = await get_prayer_times(DEFAULT_LAT, DEFAULT_LON)
         logging.info(f"Preloaded next prayer: {data['next_prayer']['name']} at {data['next_prayer']['time']}")
     except Exception as e:
@@ -103,6 +107,7 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     logging.info("Shutting down Focus Flow API...")
+    await database.disconnect_from_mongo()
 
 def silence_asyncio_connection_reset(loop, context):
     """Prevents noisy ConnectionResetError logs on Windows."""

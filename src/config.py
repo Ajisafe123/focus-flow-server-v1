@@ -12,7 +12,8 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
-    DATABASE_URL: str
+    DATABASE_URL: str  # MongoDB connection string
+    MONGODB_DB_NAME: str = "focus_flow"
     ENVIRONMENT: str
     SECRET_KEY: str
     JWT_SECRET: Optional[str] = None
@@ -45,12 +46,5 @@ class Settings(BaseSettings):
         {"name": "London", "lat": 51.5074, "lon": -0.1278},
         {"name": "New York", "lat": 40.7128, "lon": -74.0060},
     ]
-
-    @property
-    def effective_database_url(self) -> str:
-        url = self.DATABASE_URL
-        if self.ENVIRONMENT.lower() == "production" and "sslmode" not in url:
-            url += "?sslmode=require"
-        return url
 
 settings = Settings()

@@ -4,12 +4,11 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.ext.asyncio import AsyncSession
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from ..database import get_db
 from ..config import settings
-from src.models.files import File as FileModel
-from src.utils.s3_clients import upload_bytes_to_s3, generate_presigned_url
+from ..utils.s3_clients import upload_bytes_to_s3, generate_presigned_url
 
 router = APIRouter(prefix="/api/files", tags=["Files"])
 
@@ -22,7 +21,7 @@ async def upload_file(
     file: UploadFile = File(...),
     conversationId: Optional[str] = Form(None),
     messageId: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     contents = await file.read()
     size = len(contents)
@@ -52,16 +51,16 @@ async def upload_file(
         file_url = f"/files/{save_name}"
         s3_key = None
 
-    file_record = FileModel(
-        message_id=messageId,
-        file_name=filename,
-        file_type=content_type,
-        file_size=size,
-        file_url=file_url,
-        uploaded_at=datetime.utcnow()
-    )
-    db.add(file_record)
-    await db.commit()
-    await db.refresh(file_record)
+    file_record = {
+        "message_id": messageId,
+        "file_name": filename,
+        "file_type": content_type,
+        "file_size": size,
+        "file_url": file_url,
+        "uploaded_at": datetime.utcnow().isoformat()
+    }
+    
+    files_collection = db["files"]
+    result = await files_collection.insert_one(file_record)
 
-    return {"fileUrl": file_url, "fileId": str(file_record.id), "s3_key": s3_key}
+    return {"fileUrl": file_url, "fileId": str(result.inserted_id), "s3_key": s3_key}

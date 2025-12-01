@@ -1,194 +1,334 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, func, delete, update
-from sqlalchemy.orm import selectinload
-from ..models.hadith import Hadith, HadithCategory, HadithFavorite, HadithView
-from typing import List, Optional, Set
-import uuid
-from sqlalchemy.dialects.postgresql import insert
+"""MongoDB CRUD operations for Hadiths"""
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from bson import ObjectId
+from typing import List, Optional, Set, Tuple
+from datetime import datetime
+from ..models.mongo_models import HadithInDB, HadithCategoryInDB, HadithViewInDB, HadithFavoriteInDB
+import logging
 
-async def get_hadith(db: AsyncSession, hadith_id: int) -> Optional[Hadith]:
-    result = await db.execute(
-        select(Hadith)
-        .options(
-            selectinload(Hadith.category_rel), 
-            selectinload(Hadith.favorites),
-            selectinload(Hadith.views)
-        )
-        .where(Hadith.id == hadith_id)
+logger = logging.getLogger(__name__)
+
+
+async def get_hadith(db: AsyncIOMotorDatabase, hadith_id) -> Optional[HadithInDB]:
+    """Get a single hadith by ID"""
+    if isinstance(hadith_id, str):
+        hadith_id = ObjectId(hadith_id)
+    
+    hadith = await db["hadiths"].find_one({"_id": hadith_id})
+    return HadithInDB(**hadith) if hadith else None
+
+
+async def create_hadith(db: AsyncIOMotorDatabase, hadith_data: dict) -> HadithInDB:
+    """Create a new hadith"""
+    hadith_data["created_at"] = datetime.utcnow()
+    hadith_data["updated_at"] = datetime.utcnow()
+    
+    result = await db["hadiths"].insert_one(hadith_data)
+    hadith_data["_id"] = result.inserted_id
+    
+    return HadithInDB(**hadith_data)
+
+
+async def update_hadith(db: AsyncIOMotorDatabase, hadith_id, hadith_data: dict) -> Optional[HadithInDB]:
+    """Update a hadith"""
+    if isinstance(hadith_id, str):
+        hadith_id = ObjectId(hadith_id)
+    
+    hadith_data["updated_at"] = datetime.utcnow()
+    
+    result = await db["hadiths"].update_one(
+        {"_id": hadith_id},
+        {"$set": hadith_data}
     )
-    return result.scalars().first()
-
-async def create_hadith(db: AsyncSession, hadith_data: dict) -> Hadith:
-    hadith = Hadith(**hadith_data)
-    db.add(hadith)
-    await db.commit()
-    await db.refresh(hadith)
-    return hadith
-
-async def update_hadith(db: AsyncSession, hadith_id: int, hadith_data: dict) -> Optional[Hadith]:
-    hadith = await get_hadith(db, hadith_id) 
-    if not hadith:
+    
+    if result.matched_count == 0:
         return None
-    for key, value in hadith_data.items():
-        setattr(hadith, key, value)
-    await db.commit()
-    await db.refresh(hadith)
-    return hadith
+    
+    updated_hadith = await db["hadiths"].find_one({"_id": hadith_id})
+    return HadithInDB(**updated_hadith)
 
-async def delete_hadith(db: AsyncSession, hadith_id: int) -> bool:
-    hadith = await get_hadith(db, hadith_id)
-    if not hadith:
-        return False
-    await db.delete(hadith)
-    await db.commit()
-    return True
 
-async def delete_hadiths_bulk(db: AsyncSession, hadith_ids: List[int]) -> int:
+async def delete_hadith(db: AsyncIOMotorDatabase, hadith_id) -> bool:
+    """Delete a hadith"""
+    if isinstance(hadith_id, str):
+        hadith_id = ObjectId(hadith_id)
+    
+    # Delete views and favorites
+    await db["hadith_views"].delete_many({"hadith_id": hadith_id})
+    await db["hadith_favorites"].delete_many({"hadith_id": hadith_id})
+    
+    result = await db["hadiths"].delete_one({"_id": hadith_id})
+    return result.deleted_count > 0
+
+
+async def delete_hadiths_bulk(db: AsyncIOMotorDatabase, hadith_ids: List) -> int:
+    """Delete multiple hadiths"""
     if not hadith_ids:
         return 0
     
-    stmt = delete(Hadith).where(Hadith.id.in_(hadith_ids))
-    result = await db.execute(stmt)
-    await db.commit()
-    return result.rowcount
+    object_ids = [ObjectId(id) if isinstance(id, str) else id for id in hadith_ids]
+    
+    # Delete views and favorites
+    await db["hadith_views"].delete_many({"hadith_id": {"$in": object_ids}})
+    await db["hadith_favorites"].delete_many({"hadith_id": {"$in": object_ids}})
+    
+    result = await db["hadiths"].delete_many({"_id": {"$in": object_ids}})
+    return result.deleted_count
 
-async def bulk_create_hadiths(db: AsyncSession, hadiths_data: List[dict]) -> List[int]:
+
+async def bulk_create_hadiths(db: AsyncIOMotorDatabase, hadiths_data: List[dict]) -> List[str]:
+    """Create multiple hadiths at once"""
     if not hadiths_data:
         return []
-    stmt = insert(Hadith).values(hadiths_data).returning(Hadith.id)
-    result = await db.execute(stmt)
-    await db.commit()
-    inserted_ids = [row[0] for row in result.all()]
-    return inserted_ids
+    
+    for hadith in hadiths_data:
+        hadith["created_at"] = datetime.utcnow()
+        hadith["updated_at"] = datetime.utcnow()
+    
+    result = await db["hadiths"].insert_many(hadiths_data)
+    return [str(id) for id in result.inserted_ids]
 
-async def search_hadiths(db: AsyncSession, q: str, skip: int = 0, limit: int = 50) -> List[Hadith]:
-    term = f"%{q}%"
-    stmt = (
-        select(Hadith)
-        .options(
-            selectinload(Hadith.category_rel), 
-            selectinload(Hadith.favorites),
-            selectinload(Hadith.views)
-        )
-        .where(
-            or_(
-                Hadith.arabic.ilike(term),
-                Hadith.translation.ilike(term),
-                Hadith.narrator.ilike(term),
-                Hadith.book.ilike(term),
-            )
-        )
-        .offset(skip)
-        .limit(limit)
-    )
-    result = await db.execute(stmt)
-    return result.scalars().all()
 
-async def toggle_featured(db: AsyncSession, hadith_id: int) -> Optional[Hadith]:
-    hadith = await get_hadith(db, hadith_id) 
+async def search_hadiths(db: AsyncIOMotorDatabase, q: str, skip: int = 0, limit: int = 50) -> List[HadithInDB]:
+    """Search hadiths by text"""
+    query = {
+        "$or": [
+            {"arabic": {"$regex": q, "$options": "i"}},
+            {"translation": {"$regex": q, "$options": "i"}},
+            {"narrator": {"$regex": q, "$options": "i"}},
+            {"book": {"$regex": q, "$options": "i"}},
+        ]
+    }
+    
+    hadiths = await db["hadiths"].find(query).skip(skip).limit(limit).to_list(None)
+    return [HadithInDB(**hadith) for hadith in hadiths]
+
+
+async def toggle_featured(db: AsyncIOMotorDatabase, hadith_id) -> Optional[HadithInDB]:
+    """Toggle featured status of a hadith"""
+    if isinstance(hadith_id, str):
+        hadith_id = ObjectId(hadith_id)
+    
+    hadith = await db["hadiths"].find_one({"_id": hadith_id})
     if not hadith:
         return None
-    hadith.featured = not hadith.featured
-    await db.commit()
-    await db.refresh(hadith)
-    return hadith
+    
+    new_featured_status = not hadith.get("featured", False)
+    
+    await db["hadiths"].update_one(
+        {"_id": hadith_id},
+        {"$set": {"featured": new_featured_status, "updated_at": datetime.utcnow()}}
+    )
+    
+    updated_hadith = await db["hadiths"].find_one({"_id": hadith_id})
+    return HadithInDB(**updated_hadith)
 
-async def increment_view(db: AsyncSession, hadith_id: int) -> bool:
-    view = HadithView(hadith_id=hadith_id)
-    db.add(view)
-    await db.commit()
+
+async def increment_view(db: AsyncIOMotorDatabase, hadith_id) -> bool:
+    """Increment view count for a hadith"""
+    if isinstance(hadith_id, str):
+        hadith_id = ObjectId(hadith_id)
+    
+    # Add view record
+    await db["hadith_views"].insert_one({
+        "hadith_id": hadith_id,
+        "user_id": None,
+        "created_at": datetime.utcnow()
+    })
+    
     return True
 
-async def get_views_count(db: AsyncSession, hadith_id: int) -> int:
-    result = await db.execute(select(func.count(HadithView.id)).where(HadithView.hadith_id == hadith_id))
-    return result.scalar() or 0
 
-async def get_views_bulk(db: AsyncSession, hadith_ids: List[int]) -> dict:
+async def get_views_count(db: AsyncIOMotorDatabase, hadith_id) -> int:
+    """Get total views for a hadith"""
+    if isinstance(hadith_id, str):
+        hadith_id = ObjectId(hadith_id)
+    
+    count = await db["hadith_views"].count_documents({"hadith_id": hadith_id})
+    return count
+
+
+async def get_views_bulk(db: AsyncIOMotorDatabase, hadith_ids: List) -> dict:
+    """Get view counts for multiple hadiths"""
     if not hadith_ids:
         return {}
-    result = await db.execute(
-        select(HadithView.hadith_id, func.count(HadithView.id))
-        .where(HadithView.hadith_id.in_(hadith_ids))
-        .group_by(HadithView.hadith_id)
-    )
-    rows = result.all() or []
-    return {int(row[0]): int(row[1] or 0) for row in rows}
+    
+    object_ids = [ObjectId(id) if isinstance(id, str) else id for id in hadith_ids]
+    
+    pipeline = [
+        {"$match": {"hadith_id": {"$in": object_ids}}},
+        {"$group": {"_id": "$hadith_id", "count": {"$sum": 1}}}
+    ]
+    
+    results = await db["hadith_views"].aggregate(pipeline).to_list(None)
+    return {str(r["_id"]): r["count"] for r in results}
 
-async def toggle_favorite(db: AsyncSession, hadith_id: int, user_id: uuid.UUID) -> bool:
-    fav = await db.execute(
-        select(HadithFavorite).where(
-            HadithFavorite.hadith_id == hadith_id,
-            HadithFavorite.user_id == user_id
-        )
-    )
-    fav = fav.scalars().first()
+
+async def toggle_favorite(db: AsyncIOMotorDatabase, hadith_id, user_id) -> bool:
+    """Toggle favorite status for a user"""
+    if isinstance(hadith_id, str):
+        hadith_id = ObjectId(hadith_id)
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
+    
+    fav = await db["hadith_favorites"].find_one({"hadith_id": hadith_id, "user_id": user_id})
+    
     if fav:
-        await db.delete(fav)
+        await db["hadith_favorites"].delete_one({"hadith_id": hadith_id, "user_id": user_id})
     else:
-        db.add(HadithFavorite(hadith_id=hadith_id, user_id=user_id))
-    await db.commit()
+        await db["hadith_favorites"].insert_one({
+            "hadith_id": hadith_id,
+            "user_id": user_id,
+            "created_at": datetime.utcnow()
+        })
+    
     return True
 
-async def get_favorites_count(db: AsyncSession, hadith_id: int) -> int:
-    result = await db.execute(select(func.count(HadithFavorite.id)).where(HadithFavorite.hadith_id == hadith_id))
-    return result.scalar() or 0
 
-async def get_favorites_bulk(db: AsyncSession, hadith_ids: List[int]) -> dict:
+async def get_favorites_count(db: AsyncIOMotorDatabase, hadith_id) -> int:
+    """Get total favorites for a hadith"""
+    if isinstance(hadith_id, str):
+        hadith_id = ObjectId(hadith_id)
+    
+    count = await db["hadith_favorites"].count_documents({"hadith_id": hadith_id})
+    return count
+
+
+async def get_favorites_bulk(db: AsyncIOMotorDatabase, hadith_ids: List) -> dict:
+    """Get favorite counts for multiple hadiths"""
     if not hadith_ids:
         return {}
-    result = await db.execute(
-        select(HadithFavorite.hadith_id, func.count(HadithFavorite.id))
-        .where(HadithFavorite.hadith_id.in_(hadith_ids))
-        .group_by(HadithFavorite.hadith_id)
-    )
-    rows = result.all() or []
-    return {int(row[0]): int(row[1] or 0) for row in rows}
+    
+    object_ids = [ObjectId(id) if isinstance(id, str) else id for id in hadith_ids]
+    
+    pipeline = [
+        {"$match": {"hadith_id": {"$in": object_ids}}},
+        {"$group": {"_id": "$hadith_id", "count": {"$sum": 1}}}
+    ]
+    
+    results = await db["hadith_favorites"].aggregate(pipeline).to_list(None)
+    return {str(r["_id"]): r["count"] for r in results}
 
-async def get_user_favorites_set(db: AsyncSession, user_id: uuid.UUID, hadith_ids: List[int]) -> Set[int]:
+
+async def get_user_favorites_set(db: AsyncIOMotorDatabase, user_id, hadith_ids: List) -> Set[str]:
+    """Get set of favorite hadith IDs for a user"""
     if not hadith_ids:
         return set()
-    result = await db.execute(
-        select(HadithFavorite.hadith_id)
-        .where(
-            HadithFavorite.user_id == user_id,
-            HadithFavorite.hadith_id.in_(hadith_ids)
-        )
-    )
-    return set(result.scalars().all())
-
-async def get_category(db: AsyncSession, category_id: int) -> Optional[HadithCategory]:
-    result = await db.execute(
-        select(HadithCategory)
-        .options(selectinload(HadithCategory.hadiths)) 
-        .where(HadithCategory.id == category_id)
-    )
-    return result.scalars().first()
-
-async def create_category(db: AsyncSession, category_data: dict) -> HadithCategory:
-    category = HadithCategory(**category_data)
-    db.add(category)
-    await db.commit()
-    await db.refresh(category)
-    return category
-
-async def update_category(db: AsyncSession, category_id: int, category_data: dict) -> Optional[HadithCategory]:
-    category = await get_category(db, category_id)
-    if not category:
-        return None
-    for key, value in category_data.items():
-        setattr(category, key, value)
-    await db.commit()
-    await db.refresh(category)
-    return category
-
-async def delete_category(db: AsyncSession, category_id: int) -> bool:
-    category = await get_category(db, category_id)
-    if not category:
-        return False
     
-    if category.hadiths:
-        pass
-        
-    await db.delete(category)
-    await db.commit()
-    return True
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
+    
+    object_ids = [ObjectId(id) if isinstance(id, str) else id for id in hadith_ids]
+    
+    favorites = await db["hadith_favorites"].find({
+        "user_id": user_id,
+        "hadith_id": {"$in": object_ids}
+    }).to_list(None)
+    
+    return {str(fav["hadith_id"]) for fav in favorites}
+
+
+async def get_all_hadiths(db: AsyncIOMotorDatabase) -> List[HadithInDB]:
+    """Get all hadiths"""
+    hadiths = await db["hadiths"].find().to_list(None)
+    return [HadithInDB(**hadith) for hadith in hadiths]
+
+
+async def get_paginated_hadiths(
+    db: AsyncIOMotorDatabase,
+    page: int,
+    limit: int,
+    sort_by: str,
+    sort_order: str,
+    q: Optional[str],
+    category_id: Optional[str],
+    featured: Optional[bool]
+) -> Tuple[List[HadithInDB], List[ObjectId]]:
+    """Get paginated hadiths with filtering"""
+    query = {}
+    
+    if q:
+        query["$or"] = [
+            {"arabic": {"$regex": q, "$options": "i"}},
+            {"translation": {"$regex": q, "$options": "i"}},
+            {"narrator": {"$regex": q, "$options": "i"}},
+            {"book": {"$regex": q, "$options": "i"}},
+        ]
+    
+    if category_id:
+        if isinstance(category_id, str):
+            category_id = ObjectId(category_id)
+        query["category_id"] = category_id
+    
+    if featured is not None:
+        query["featured"] = featured
+    
+    # Determine sort order
+    sort_direction = -1 if sort_order.lower() == "desc" else 1
+    sort_key = sort_by if sort_by != "id" else "_id"
+    
+    # Get paginated results
+    skip = (page - 1) * limit
+    hadiths = await db["hadiths"].find(query).sort(sort_key, sort_direction).skip(skip).limit(limit).to_list(None)
+    
+    hadiths_list = [HadithInDB(**hadith) for hadith in hadiths]
+    hadith_ids = [hadith.id for hadith in hadiths_list]
+    
+    return hadiths_list, hadith_ids
+
+
+async def get_all_categories(db: AsyncIOMotorDatabase) -> List[HadithCategoryInDB]:
+    """Get all hadith categories"""
+    categories = await db["hadith_categories"].find().sort("_id", 1).to_list(None)
+    return [HadithCategoryInDB(**cat) for cat in categories]
+
+
+async def get_category(db: AsyncIOMotorDatabase, category_id) -> Optional[HadithCategoryInDB]:
+    """Get a single hadith category"""
+    if isinstance(category_id, str):
+        category_id = ObjectId(category_id)
+    
+    category = await db["hadith_categories"].find_one({"_id": category_id})
+    return HadithCategoryInDB(**category) if category else None
+
+
+async def create_category(db: AsyncIOMotorDatabase, category_data: dict) -> HadithCategoryInDB:
+    """Create a new hadith category"""
+    category_data["created_at"] = datetime.utcnow()
+    
+    result = await db["hadith_categories"].insert_one(category_data)
+    category_data["_id"] = result.inserted_id
+    
+    return HadithCategoryInDB(**category_data)
+
+
+async def update_category(db: AsyncIOMotorDatabase, category_id, category_data: dict) -> Optional[HadithCategoryInDB]:
+    """Update a hadith category"""
+    if isinstance(category_id, str):
+        category_id = ObjectId(category_id)
+    
+    result = await db["hadith_categories"].update_one(
+        {"_id": category_id},
+        {"$set": category_data}
+    )
+    
+    if result.matched_count == 0:
+        return None
+    
+    updated_category = await db["hadith_categories"].find_one({"_id": category_id})
+    return HadithCategoryInDB(**updated_category)
+
+
+async def delete_category(db: AsyncIOMotorDatabase, category_id) -> bool:
+    """Delete a hadith category and update associated hadiths"""
+    if isinstance(category_id, str):
+        category_id = ObjectId(category_id)
+    
+    # Update hadiths to remove category reference
+    await db["hadiths"].update_many(
+        {"category_id": category_id},
+        {"$set": {"category_id": None}}
+    )
+    
+    result = await db["hadith_categories"].delete_one({"_id": category_id})
+    return result.deleted_count > 0

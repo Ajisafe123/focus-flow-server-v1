@@ -1,41 +1,78 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
+import motor.motor_asyncio
 from src.config import settings
-import ssl
+from typing import Optional
+import logging
 
-DATABASE_URL = settings.effective_database_url.strip()
+logger = logging.getLogger(__name__)
 
-if "sslmode" in DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.split("?")[0]
+client: Optional[motor.motor_asyncio.AsyncClient] = None
+db = None
 
-connect_args = {"server_settings": {"client_encoding": "utf8"}}
-if "render.com" in DATABASE_URL:
-    ssl_context = ssl.create_default_context()
-    connect_args["ssl"] = ssl_context
+async def connect_to_mongo():
+    """Establish MongoDB connection"""
+    global client, db
+    try:
+        client = motor.motor_asyncio.AsyncClient(
+            settings.DATABASE_URL,
+            serverSelectionTimeoutMS=5000,
+            retryWrites=True,
+            w="majority"
+        )
+        # Verify connection
+        await client.admin.command('ping')
+        db = client[settings.MONGODB_DB_NAME]
+        logger.info("✅ Connected to MongoDB successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to MongoDB: {e}")
+        raise
 
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    pool_size=10,
-    max_overflow=5,
-    pool_timeout=30,
-    connect_args=connect_args,
-)
+async def disconnect_from_mongo():
+    """Close MongoDB connection"""
+    global client
+    if client is not None:
+        client.close()
+        logger.info("✅ Disconnected from MongoDB")
 
-async_session_maker = sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
-
-Base = declarative_base()
-
-async def get_db() -> AsyncSession:
-    async with async_session_maker() as session:
-        yield session
+async def get_db():
+    """Get database instance for dependency injection"""
+    if db is None:
+        raise RuntimeError("Database not initialized. Call connect_to_mongo() first.")
+    return db
 
 async def init_db() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Initialize database (create collections and indexes if needed)"""
+    if db is None:
+        raise RuntimeError("Database not initialized. Call connect_to_mongo() first.")
+    
+    # Create collections and indexes
+    collections_to_create = {
+        'users': [('email', True), ('username', True)],
+        'duas': [('category_id', False), ('featured', False)],
+        'dua_categories': [('name', True)],
+        'hadiths': [('category_id', False), ('featured', False)],
+        'hadith_categories': [('name', True)],
+        'articles': [('category_id', False), ('featured', False)],
+        'article_categories': [('name', True)],
+        'dua_views': [('dua_id', False), ('user_id', False)],
+        'dua_favorites': [('dua_id', False), ('user_id', False)],
+        'hadith_views': [('hadith_id', False), ('user_id', False)],
+        'hadith_favorites': [('hadith_id', False), ('user_id', False)],
+        'article_views': [('article_id', False), ('user_id', False)],
+        'article_favorites': [('article_id', False), ('user_id', False)],
+    }
+    
+    for collection_name, indexes in collections_to_create.items():
+        try:
+            # Create collection if it doesn't exist
+            if collection_name not in await db.list_collection_names():
+                await db.create_collection(collection_name)
+                logger.info(f"✅ Created collection: {collection_name}")
+            
+            # Create indexes
+            collection = db[collection_name]
+            for field, unique in indexes:
+                await collection.create_index(field, unique=unique)
+        except Exception as e:
+            logger.warning(f"Index creation warning for {collection_name}: {e}")
+    
+    logger.info("✅ Database initialization complete")
