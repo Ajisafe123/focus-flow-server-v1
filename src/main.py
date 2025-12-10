@@ -29,7 +29,10 @@ from src.routers import (
     websocket_routes,
     notifications,
     notification_ws,
+    notification_ws,
     media,
+    shop,
+    donations,
 )
 from src.services.prayer_service import get_prayer_times, DEFAULT_LAT, DEFAULT_LON
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -89,6 +92,8 @@ app.include_router(websocket_routes.router)
 app.include_router(notifications.router)
 app.include_router(notification_ws.router)
 app.include_router(media.router)
+app.include_router(shop.router)
+app.include_router(donations.router)
 
 @app.get("/")
 async def read_root():

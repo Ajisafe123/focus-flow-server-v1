@@ -22,7 +22,7 @@ from ..schemas.users import (
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register")
 async def register(user_data: UserCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     if await crud_users.get_user_by_username(db, user_data.username):
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -61,6 +61,30 @@ async def verify_email(req: VerifyCodeRequest, db: AsyncIOMotorDatabase = Depend
     token = crud_users.create_access_token({"sub": str(user["_id"])})
     return {"message": "Email verified", "token": token}
 
+
+@router.post("/resend-verification")
+async def resend_verification(req: ForgotPasswordRequest, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Resend verification code to the user's email."""
+    user = await crud_users.get_user_by_email(db, req.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.get("is_verified"):
+        return {"message": "User already verified"}
+
+    code = secrets.token_hex(3).upper()
+    await crud_users.update_user(db, user["_id"], {
+        "verification_code": code,
+        "verification_code_expires_at": datetime.utcnow() + timedelta(minutes=15)
+    })
+    
+    try:
+        await send_password_reset_email(req.email, code)
+    except:
+        pass
+        
+    return {"message": "Verification code resent"}
+
 @router.post("/login")
 async def login(user_data: UserLogin, db: AsyncIOMotorDatabase = Depends(get_db)):
     user = await crud_users.authenticate_user(db, user_data.identifier, user_data.password)
@@ -76,10 +100,14 @@ async def login(user_data: UserLogin, db: AsyncIOMotorDatabase = Depends(get_db)
             await send_password_reset_email(user["email"], code)
         except:
             pass
-        raise HTTPException(
+        return JSONResponse(
             status_code=403,
-            detail="Email not verified. A new code has been sent.",
-            headers={"X-Requires-Verification": "true"}
+            content={
+                "detail": "Email not verified. A new code has been sent.",
+                "message": "Email not verified. A new code has been sent.",
+                "email": user["email"],
+                "requires_verification": True
+            }
         )
     token = crud_users.create_access_token({"sub": str(user["_id"])})
     # fire-and-forget login notification + email

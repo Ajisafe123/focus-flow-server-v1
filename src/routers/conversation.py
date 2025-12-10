@@ -86,6 +86,18 @@ async def create_conversation(
         else:
             user_id = user["_id"]
 
+    if user_id:
+        # Check for existing conversation
+        existing_conv = await conversations_collection.find_one({"user_id": user_id})
+        if existing_conv:
+            return {
+                "id": str(existing_conv["_id"]),
+                "user_id": str(user_id),
+                "status": existing_conv.get("status", "active"),
+                "created_at": existing_conv.get("created_at"),
+                "updated_at": existing_conv.get("updated_at")
+            }
+
     conv_data = {
         "user_id": user_id,
         "status": "active",

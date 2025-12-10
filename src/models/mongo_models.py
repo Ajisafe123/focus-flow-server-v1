@@ -284,3 +284,31 @@ class DonationInDB(BaseModel):
 
     class Config:
         populate_by_name = True
+# Contact Models
+class ContactMessageInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(alias="_id")
+    name: str
+    email: str
+    subject: str
+    message: str
+    is_read: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+
+
+# Notification Models
+class NotificationInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(alias="_id")
+    type: str  # "login", "contact", "chat", "system"
+    title: str
+    message: str
+    recipient_role: str = "admin"  # or user_id
+    is_read: bool = False
+    link: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+

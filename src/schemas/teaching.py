@@ -3,19 +3,20 @@ from pydantic import BaseModel, Field
 from bson import ObjectId
 
 
-class PyObjectId(ObjectId):
+class PyObjectId(str):
     @classmethod
     def __get_validators__(cls):
         yield cls.validate
 
     @classmethod
-    def validate(cls, v):
-        if isinstance(v, ObjectId):
-            return v
-        try:
-            return ObjectId(str(v))
-        except Exception:
-            raise ValueError("Invalid ObjectId")
+    def validate(cls, v, info=None):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid objectid")
+        return str(ObjectId(v))
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema, handler):
+        return {"type": "string"}
 
 
 class MongoModel(BaseModel):

@@ -26,11 +26,9 @@ async def send_email(subject: str, recipient: str, html_content: str):
             hostname=settings.SMTP_HOST,
             port=settings.SMTP_PORT,
             start_tls=True,
-            timeout=10,  # socket timeout
+            timeout=20,  # Increased timeout
         ) as smtp:
-            print("SMTP: connecting...")
-            await smtp.connect()
-            print("SMTP: logging in...")
+            print(f"SMTP: Connected to {settings.SMTP_HOST}:{settings.SMTP_PORT}. Logging in...")
             await smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
             print("SMTP: sending message...")
             response = await smtp.send_message(message)
@@ -39,13 +37,17 @@ async def send_email(subject: str, recipient: str, html_content: str):
 
     try:
         # Hard cap total send time to avoid hanging the request
-        response = await asyncio.wait_for(_send(), timeout=15)
+        response = await asyncio.wait_for(_send(), timeout=25)
         print("Brevo SMTP response:")
         print(response)
         return response
     except Exception as e:
-        print("Error sending email:")
-        print(e)
+        import traceback
+        print(f"❌ FAILED sending email to {recipient}")
+        print(f"Error Type: {type(e).__name__}")
+        print(f"Error Message: {str(e)}")
+        print("Full Traceback:")
+        traceback.print_exc()
         raise
 
 

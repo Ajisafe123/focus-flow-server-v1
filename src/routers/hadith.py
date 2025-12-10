@@ -34,7 +34,18 @@ async def hadith_of_day(db: AsyncIOMotorDatabase = Depends(get_db)):
     """Return a random hadith for daily display."""
     hadith = await crud_hadith.get_random_hadith(db)
     if not hadith:
-        raise HTTPException(status_code=404, detail="Hadith not found")
+        # Fallback if DB is empty to prevent 404
+        return HadithRead(
+            id=str(ObjectId()),
+            arabic="إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ",
+            translation="Actions are judged by intentions.",
+            narrator="Umar bin Al-Khattab",
+            book="Sahih Al-Bukhari",
+            number="1",
+            view_count=0,
+            favorite_count=0,
+            category_id=None
+        )
     hadith["view_count"] = 0
     hadith["favorite_count"] = 0
     return HadithRead(**hadith)

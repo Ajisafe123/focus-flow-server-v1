@@ -2,7 +2,6 @@ from datetime import datetime
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import List, Optional
-
 from .ws_manager import manager
 
 
@@ -13,13 +12,43 @@ async def create_notifications(
     notif_type: str = "info",
     user_ids: Optional[List[str]] = None,
     link: Optional[str] = None,
+    recipient_role: Optional[str] = None,
 ):
     """
     Persist notifications and broadcast over websockets.
-    If user_ids is None or empty, treat as a global notification.
+    If user_ids is None or empty AND recipient_role is None, treat as a global notification.
     """
     collection = db["notifications"]
     now = datetime.utcnow()
+    
+    # If role specified, we create one doc for that role (shared)
+    if recipient_role:
+        doc = {
+            "title": title,
+            "message": message,
+            "type": notif_type,
+            "user_id": None,
+            "recipient_role": recipient_role,
+            "link": link,
+            "read": False,
+            "created_at": now,
+        }
+        res = await collection.insert_one(doc)
+        # Broadcast to role room
+        room = f"notifications:role:{recipient_role}"
+        payload = {
+            "id": str(res.inserted_id),
+            "title": title,
+            "message": message,
+            "type": notif_type,
+            "recipient_role": recipient_role,
+            "link": link,
+            "read": False,
+            "created_at": now.isoformat(),
+        }
+        await manager.broadcast_room(room, {"event": "notification", "data": payload})
+        return [payload]
+
     targets = user_ids or [None]
     inserted = []
 
@@ -29,6 +58,7 @@ async def create_notifications(
             "message": message,
             "type": notif_type,
             "user_id": ObjectId(uid) if uid else None,
+            "recipient_role": None,
             "link": link,
             "read": False,
             "created_at": now,

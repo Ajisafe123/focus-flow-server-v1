@@ -20,4 +20,13 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str):
             else:
                 await manager.send_personal(websocket, {"event": "unknown", "action": action})
     except WebSocketDisconnect:
-        manager.disconnect(conversation_id, websocket)
+        await manager.disconnect_async(conversation_id, websocket)
+@router.websocket("/admin")
+async def admin_websocket_endpoint(websocket: WebSocket):
+    await manager.connect_admin(websocket)
+    try:
+        while True:
+             # Keep connection alive, ignore incoming messages from admin for now
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await manager.disconnect_admin_async(websocket)
