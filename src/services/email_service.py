@@ -26,7 +26,7 @@ async def send_email(subject: str, recipient: str, html_content: str):
             hostname=settings.SMTP_HOST,
             port=settings.SMTP_PORT,
             start_tls=True,
-            timeout=20,  # Increased timeout
+            timeout=60,  # Increased timeout to 60s
         ) as smtp:
             print(f"SMTP: Connected to {settings.SMTP_HOST}:{settings.SMTP_PORT}. Logging in...")
             await smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
@@ -36,8 +36,8 @@ async def send_email(subject: str, recipient: str, html_content: str):
             return response
 
     try:
-        # Hard cap total send time to avoid hanging the request
-        response = await asyncio.wait_for(_send(), timeout=25)
+        # Hard cap total send time to 120s
+        response = await asyncio.wait_for(_send(), timeout=120)
         print("Brevo SMTP response:")
         print(response)
         return response
