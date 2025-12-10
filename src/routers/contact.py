@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime
 from typing import List, Optional
@@ -11,7 +11,11 @@ from ..utils.users import get_current_user
 router = APIRouter(prefix="/contact", tags=["Contact"])
 
 @router.post("/send")
-async def send_message(message: ContactMessageCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def send_message(
+    message: ContactMessageCreate, 
+    background_tasks: BackgroundTasks,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
     contact_collection = db["contact_messages"]
     
     new_message = message.dict()
@@ -20,11 +24,8 @@ async def send_message(message: ContactMessageCreate, db: AsyncIOMotorDatabase =
     
     result = await contact_collection.insert_one(new_message)
     
-    # Try sending email
-    try:
-        await send_contact_notification(message, recipient="ajisafeibrahim54@gmail.com")
-    except Exception as e:
-        print(f"Warning: Contact email notification failed: {e}")
+    # Send email in background
+    background_tasks.add_task(send_contact_notification, message, recipient="ajisafeibrahim54@gmail.com")
 
     # Create Admin Notification
     try:

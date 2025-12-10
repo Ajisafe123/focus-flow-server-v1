@@ -26,7 +26,7 @@ async def send_email(subject: str, recipient: str, html_content: str):
             hostname=settings.SMTP_HOST,
             port=settings.SMTP_PORT,
             start_tls=True,
-            timeout=60,  # Increased timeout to 60s
+            timeout=60,
         ) as smtp:
             print(f"SMTP: Connected to {settings.SMTP_HOST}:{settings.SMTP_PORT}. Logging in...")
             await smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
