@@ -18,4 +18,4 @@ hijri-converter
 requests
 httpx
 pytz
-timezonefinder
+timezonefinderpraytimes
