@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from src.routers import users
 from .config import settings
 from . import database
 from .database import init_db
@@ -15,10 +14,10 @@ from src.routers import (
     allah_names,
     calendar,
     qibla,
-    zakat,
     hadith,
     duas,
     articles,
+    teaching,
     contact,
     users,
     admin,
@@ -28,6 +27,9 @@ from src.routers import (
     ratings,
     quran,
     websocket_routes,
+    notifications,
+    notification_ws,
+    media,
 )
 from src.services.prayer_service import get_prayer_times, DEFAULT_LAT, DEFAULT_LON
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -42,6 +44,9 @@ app.add_middleware(
     allow_origins=[
         "https://nibrasudeen.vercel.app",
         "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -67,12 +72,12 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(users.router)
 app.include_router(prayer_routes.router)
 app.include_router(allah_names.router)
-app.include_router(zakat.router)
 app.include_router(qibla.router)
 app.include_router(calendar.router)
 app.include_router(hadith.router)
 app.include_router(duas.router)
 app.include_router(articles.router)
+app.include_router(teaching.router)
 app.include_router(contact.router)
 app.include_router(admin.router)
 app.include_router(conversation.router)
@@ -81,6 +86,9 @@ app.include_router(files.router)
 app.include_router(ratings.router)
 app.include_router(quran.router)
 app.include_router(websocket_routes.router)
+app.include_router(notifications.router)
+app.include_router(notification_ws.router)
+app.include_router(media.router)
 
 @app.get("/")
 async def read_root():
@@ -89,6 +97,11 @@ async def read_root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+# Legacy alias for frontend expecting /api/day
+@app.get("/api/day")
+async def alias_day():
+    return await calendar.get_today()
 
 @app.on_event("startup")
 async def on_startup():

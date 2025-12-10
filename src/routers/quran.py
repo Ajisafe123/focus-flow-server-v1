@@ -32,7 +32,7 @@ async def mark_bookmarks(verses, current_user, db: AsyncIOMotorDatabase):
         verse["bookmarked"] = verse["verse_key"] in bookmarked_keys
     return verses
 
-@router.get("/surahs")
+@router.get("/surahs", response_model=None)
 @cache(ttl=3600)
 async def list_surahs_route():
     data = await get_surah_list()
@@ -40,14 +40,14 @@ async def list_surahs_route():
         raise HTTPException(status_code=500, detail="Failed to fetch surah list")
     return data
 
-@router.get("/surah/{surah_number}")
+@router.get("/surah/{surah_number}", response_model=None)
 @cache(ttl=3600)
 async def read_surah_route(
     surah_number: int,
-    translation: str = Query("en.asad"),
+    translation: str = Query("en.sahih"),
     tafsir_sources: Optional[List[str]] = Query(None),
     reciter: Optional[str] = Query(None),
-    current_user = Depends(get_optional_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     data = await get_surah_detail(surah_number, translation, tafsir_sources, reciter)
@@ -57,14 +57,14 @@ async def read_surah_route(
         data["verses"] = await mark_bookmarks(data["verses"], current_user, db)
     return data
 
-@router.get("/page/{page_number}")
+@router.get("/page/{page_number}", response_model=None)
 @cache(ttl=3600)
 async def read_quran_page_route(
     page_number: int,
     translation: str = Query("en.sahih"),
     tafsir_sources: Optional[List[str]] = Query(None),
     reciter: Optional[str] = Query(None),
-    current_user = Depends(get_optional_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     if not 1 <= page_number <= 604:
@@ -80,12 +80,12 @@ async def read_quran_page_route(
         
     return data
 
-@router.get("/ayah/{ayah_key}")
+@router.get("/ayah/{ayah_key}", response_model=None)
 async def read_ayah_route(
     ayah_key: str,
     tafsir_sources: Optional[List[str]] = Query(None),
     reciter: Optional[str] = Query(None),
-    current_user = Depends(get_optional_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     data = await get_ayah(ayah_key, tafsir_sources, reciter)
@@ -102,7 +102,7 @@ async def read_ayah_route(
     
     return data
 
-@router.get("/translation/{lang}")
+@router.get("/translation/{lang}", response_model=None)
 @cache(ttl=86400)
 async def translation_route(lang: str):
     data = await get_translation(lang)
@@ -110,15 +110,15 @@ async def translation_route(lang: str):
         raise HTTPException(status_code=404, detail="Translation not found")
     return data
 
-@router.get("/reciters")
+@router.get("/reciters", response_model=None)
 async def reciters_route():
     return {"reciters": list_reciters()}
 
-@router.get("/search")
+@router.get("/search", response_model=None)
 async def search_route(
     q: str,
     tafsir_source: Optional[str] = Query(None),
-    current_user = Depends(get_optional_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     results = await search_quran(q, tafsir_source)
@@ -126,10 +126,10 @@ async def search_route(
         await mark_bookmarks(results, current_user, db)
     return results
 
-@router.post("/bookmark")
+@router.post("/bookmark", response_model=None)
 async def toggle_bookmark(
     ayah_key: str = Body(...),
-    current_user = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     bookmarks_collection = db["bookmarks"]

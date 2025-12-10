@@ -9,14 +9,14 @@ from ..utils.users import get_password_hash, get_current_user
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 
-async def admin_only(current_user = Depends(get_current_user)):
+async def admin_only(current_user: dict = Depends(get_current_user)):
     """Admin role check"""
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
 
-@router.get("/users")
+@router.get("/users", response_model=None)
 async def list_regular_users(
     limit: int = Query(20, gt=0),
     offset: int = Query(0, ge=0),
@@ -62,7 +62,7 @@ async def list_regular_users(
     return {"total": total, "limit": limit, "offset": offset, "users": out}
 
 
-@router.get("/users/stats")
+@router.get("/users/stats", response_model=None)
 async def regular_users_stats(
     db: AsyncIOMotorDatabase = Depends(get_db),
     admin = Depends(admin_only)
@@ -84,7 +84,7 @@ async def regular_users_stats(
     }
 
 
-@router.get("/users/{user_id}")
+@router.get("/users/{user_id}", response_model=None)
 async def get_regular_user_full(
     user_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -126,7 +126,7 @@ async def get_regular_user_full(
         "is_verified": u.get("is_verified", False)
     }
 
-@router.post("/users", status_code=status.HTTP_201_CREATED)
+@router.post("/users", status_code=status.HTTP_201_CREATED, response_model=None)
 async def create_regular_user(
     payload: dict = Body(...),
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -171,7 +171,7 @@ async def create_regular_user(
         "status": new_user["status"]
     }
 
-@router.put("/users/{user_id}")
+@router.put("/users/{user_id}", response_model=None)
 async def edit_regular_user(
     user_id: str,
     payload: dict = Body(...),
@@ -225,7 +225,7 @@ async def edit_regular_user(
         "status": updated_user.get("status")
     }
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_regular_user(
     user_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -244,7 +244,7 @@ async def delete_regular_user(
     
     return {"detail": "deleted"}
 
-@router.patch("/users/{user_id}/suspend")
+@router.patch("/users/{user_id}/suspend", response_model=None)
 async def suspend_regular_user(
     user_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -273,7 +273,7 @@ async def suspend_regular_user(
     updated = await users_collection.find_one({"_id": obj_id})
     return {"detail": "suspended", "status": updated.get("status")}
 
-@router.patch("/users/{user_id}/activate")
+@router.patch("/users/{user_id}/activate", response_model=None)
 async def activate_regular_user(
     user_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -302,7 +302,7 @@ async def activate_regular_user(
     updated = await users_collection.find_one({"_id": obj_id})
     return {"detail": "activated", "status": updated.get("status")}
 
-@router.patch("/users/{user_id}/role")
+@router.patch("/users/{user_id}/role", response_model=None)
 async def change_regular_user_role(
     user_id: str,
     payload: dict = Body(...),

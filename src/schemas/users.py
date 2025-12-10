@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, constr, validator, Field
-from typing import Optional
+from typing import Optional, Union
 from datetime import datetime
-from uuid import UUID
+from bson import ObjectId
 
 
 class UserBase(BaseModel):
@@ -24,7 +24,7 @@ class UserCreate(UserBase):
 
 
 class UserResponse(BaseModel):
-    id: UUID
+    id: Optional[Union[str, ObjectId]] = Field(None, alias="_id")
     username: str
     email: str
     full_name: Optional[str] = None
@@ -38,8 +38,16 @@ class UserResponse(BaseModel):
     created_at: Optional[datetime] = None
     role: Optional[str] = "user"
 
+    @validator("id", pre=True, always=True)
+    def convert_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+
     class Config:
         from_attributes = True
+        populate_by_name = True
+        arbitrary_types_allowed = True
 
 
 class UserUpdate(BaseModel):
@@ -89,12 +97,20 @@ class ChatUserCreate(BaseModel):
 
 
 class ChatUserOut(BaseModel):
-    id: UUID
+    id: Optional[Union[str, ObjectId]] = Field(None, alias="_id")
     name: str
     email: EmailStr
     avatar_letter: Optional[str]
     is_online: Optional[bool]
     created_at: Optional[datetime]
 
+    @validator("id", pre=True, always=True)
+    def convert_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+
     class Config:
-        orm_mode = True
+        from_attributes = True
+        populate_by_name = True
+        arbitrary_types_allowed = True

@@ -1,12 +1,12 @@
 import asyncio
 import json
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from typing import Dict, Optional
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from ..services import prayer_service
 from ..database import get_db
 from ..schemas.users import UserResponse
-from ..utils.users import get_current_user, get_optional_user
+from ..utils.users import get_current_user as get_current_user_util, get_optional_user as get_optional_user_util, oauth2_scheme, optional_oauth2_scheme
 import httpx
 
 router = APIRouter(prefix="/prayers", tags=["Prayers"])
@@ -16,14 +16,28 @@ USER_SETTINGS: Dict[str, Dict] = {}
 DEFAULT_LAT = 7.3775
 DEFAULT_LON = 3.947
 
-@router.get("/times")
+async def get_optional_current_user(
+    token: Optional[str] = Depends(optional_oauth2_scheme),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+) -> Optional[dict]:
+    """Wrapper to get optional user with proper dependencies"""
+    return await get_optional_user_util(token, db)
+
+async def get_authenticated_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+) -> dict:
+    """Wrapper to get authenticated user with proper dependencies"""
+    return await get_current_user_util(token, db)
+
+@router.get("/times", response_model=None)
 async def get_prayer_times_endpoint(
     lat: Optional[float] = Query(None),
     lon: Optional[float] = Query(None),
     method: str = Query("ISNA"),
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user = Depends(get_optional_user) 
-):
+    current_user: Optional[dict] = Depends(get_optional_current_user) 
+) -> dict:
     final_lat = lat
     final_lon = lon
     
@@ -51,7 +65,7 @@ async def get_prayer_times_endpoint(
     data = await prayer_service.get_prayer_times(final_lat, final_lon, method)
     return data
 
-@router.get("/reverse-geocode")
+@router.get("/reverse-geocode", response_model=None)
 async def reverse_geocode_proxy(
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude")
@@ -76,12 +90,12 @@ async def reverse_geocode_proxy(
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            return {"error": f"Nominatim request failed: {e.response.status_code}"}, e.response.status_code
+            raise HTTPException(status_code=e.response.status_code, detail=f"Nominatim request failed: {e.response.status_code}")
         except httpx.RequestError as e:
-            return {"error": f"An error occurred while requesting Nominatim: {e}"}, 500
+            raise HTTPException(status_code=500, detail=f"An error occurred while requesting Nominatim: {str(e)}")
 
-@router.get("/users/me", response_model=dict)
-async def read_users_me(current_user = Depends(get_current_user)):
+@router.get("/users/me", response_model=None)
+async def read_users_me(current_user: dict = Depends(get_authenticated_user)):
     return {
         "id": str(current_user.get("_id")),
         "email": current_user.get("email"),
@@ -92,14 +106,14 @@ async def read_users_me(current_user = Depends(get_current_user)):
         "longitude": current_user.get("longitude")
     }
 
-@router.post("/users/me/mute")
-async def mute_azan(current_user = Depends(get_current_user)):
+@router.post("/users/me/mute", response_model=None)
+async def mute_azan(current_user: dict = Depends(get_authenticated_user)):
     user_id = str(current_user.get("_id"))
     USER_SETTINGS[user_id] = {"muted": True}
     return {"status": "success", "muted": True}
 
-@router.post("/users/me/unmute")
-async def unmute_azan(current_user = Depends(get_current_user)):
+@router.post("/users/me/unmute", response_model=None)
+async def unmute_azan(current_user: dict = Depends(get_authenticated_user)):
     user_id = str(current_user.get("_id"))
     USER_SETTINGS[user_id] = {"muted": False}
     return {"status": "success", "muted": False}
@@ -164,7 +178,7 @@ async def prayer_ws(ws: WebSocket, db: AsyncIOMotorDatabase = Depends(get_db)):
         token = data.get("token")
         if token:
             try:
-                current_user = await get_optional_user(token)
+                current_user = await get_optional_user_util(token, db)
             except Exception:
                 pass
         

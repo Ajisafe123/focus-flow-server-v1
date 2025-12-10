@@ -28,7 +28,18 @@ def _normalize_row(hadith_dict: dict, view_count: int, favorite_count: int) -> H
 
 router = APIRouter(prefix="/api", tags=["Hadiths"])
 
-@router.get("/hadiths", response_model=List[HadithRead])
+
+@router.get("/day", response_model=None)
+async def hadith_of_day(db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Return a random hadith for daily display."""
+    hadith = await crud_hadith.get_random_hadith(db)
+    if not hadith:
+        raise HTTPException(status_code=404, detail="Hadith not found")
+    hadith["view_count"] = 0
+    hadith["favorite_count"] = 0
+    return HadithRead(**hadith)
+
+@router.get("/hadiths", response_model=None)
 async def list_hadiths(db: AsyncIOMotorDatabase = Depends(get_db)):
     hadiths = await crud_hadith.get_all_hadiths(db)
     hadith_ids = [h["_id"] for h in hadiths]
@@ -44,7 +55,7 @@ async def list_hadiths(db: AsyncIOMotorDatabase = Depends(get_db)):
         
     return hadiths_with_counts
 
-@router.get("/hadiths/paginated", response_model=Dict[str, Any])
+@router.get("/hadiths/paginated", response_model=None)
 async def list_hadiths_paginated(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1),
@@ -53,7 +64,7 @@ async def list_hadiths_paginated(
     q: Optional[str] = None,
     category_id: Optional[str] = None,
     featured: Optional[bool] = None,
-    current_user = Depends(get_optional_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     hadiths, hadith_ids = await crud_hadith.get_paginated_hadiths(db, page, limit, sort_by, sort_order, q, category_id, featured)
@@ -80,12 +91,12 @@ async def list_hadiths_paginated(
         "total_count": total_count
     }
 
-@router.post("/hadiths", response_model=HadithRead)
+@router.post("/hadiths", response_model=None)
 async def create_hadith_route(hadith_data: HadithCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     created = await crud_hadith.create_hadith(db, hadith_data.model_dump())
     return HadithRead(**created)
 
-@router.get("/hadiths/stats", response_model=HadithStats)
+@router.get("/hadiths/stats", response_model=None)
 async def get_hadiths_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     all_hadiths = await crud_hadith.get_all_hadiths(db)
     
@@ -129,7 +140,7 @@ async def get_hadiths_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
         top_viewed=[safe_hadith_item(h[0]) for h in top_viewed],
     )
 
-@router.delete("/hadiths/bulk")
+@router.delete("/hadiths/bulk", response_model=None)
 async def delete_hadiths_bulk_route(
     hadith_ids: List[str], 
     db: AsyncIOMotorDatabase = Depends(get_db)
@@ -149,7 +160,7 @@ async def delete_hadiths_bulk_route(
         
     return {"detail": f"{deleted_count} Hadiths deleted successfully."}
 
-@router.post("/hadiths/bulk-data-upload")
+@router.post("/hadiths/bulk-data-upload", response_model=None)
 async def bulk_data_upload_route(
     file: UploadFile = File(...),
     category_id: Optional[str] = Form(None), 
@@ -219,7 +230,7 @@ async def bulk_data_upload_route(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File processing error: {e}")
 
-@router.get("/hadiths/{hadith_id}", response_model=HadithRead)
+@router.get("/hadiths/{hadith_id}", response_model=None)
 async def get_hadith_route(hadith_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(hadith_id)
@@ -239,8 +250,8 @@ async def get_hadith_route(hadith_id: str, db: AsyncIOMotorDatabase = Depends(ge
     
     return HadithRead(**hadith)
 
-@router.put("/hadiths/{hadith_id}", response_model=HadithRead)
-@router.patch("/hadiths/{hadith_id}", response_model=HadithRead)
+@router.put("/hadiths/{hadith_id}", response_model=None)
+@router.patch("/hadiths/{hadith_id}", response_model=None)
 async def update_hadith_route(
     hadith_id: str,
     hadith_data: HadithUpdate,
@@ -256,7 +267,7 @@ async def update_hadith_route(
         raise HTTPException(status_code=404, detail="Hadith not found")
     return HadithRead(**updated)
 
-@router.delete("/hadiths/{hadith_id}")
+@router.delete("/hadiths/{hadith_id}", response_model=None)
 async def delete_hadith_route(hadith_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(hadith_id)
@@ -268,7 +279,7 @@ async def delete_hadith_route(hadith_id: str, db: AsyncIOMotorDatabase = Depends
         raise HTTPException(status_code=404, detail="Hadith not found")
     return {"detail": "Hadith deleted successfully"}
 
-@router.get("/day", response_model=HadithSchema)
+@router.get("/day", response_model=None)
 async def hadith_of_the_day(db: AsyncIOMotorDatabase = Depends(get_db)):
     today_key = await _cache_key("hadith_of_the_day", date.today().isoformat())
     cached = cache.get(today_key)
@@ -299,7 +310,7 @@ async def hadith_of_the_day(db: AsyncIOMotorDatabase = Depends(get_db)):
     cache[today_key] = response
     return response
 
-@router.patch("/hadiths/{hadith_id}/featured")
+@router.patch("/hadiths/{hadith_id}/featured", response_model=None)
 async def toggle_featured_route(hadith_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(hadith_id)
@@ -315,7 +326,7 @@ async def toggle_featured_route(hadith_id: str, db: AsyncIOMotorDatabase = Depen
     
     return {"id": hadith_id, "featured": updated.get("featured")}
 
-@router.patch("/hadiths/{hadith_id}/increment-view")
+@router.patch("/hadiths/{hadith_id}/increment-view", response_model=None)
 async def increment_view_route(hadith_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(hadith_id)
@@ -327,10 +338,10 @@ async def increment_view_route(hadith_id: str, db: AsyncIOMotorDatabase = Depend
         raise HTTPException(status_code=404, detail="Hadith not found")
     return {"id": hadith_id, "status": "view incremented"}
 
-@router.patch("/hadiths/{hadith_id}/toggle-favorite")
+@router.patch("/hadiths/{hadith_id}/toggle-favorite", response_model=None)
 async def toggle_favorite_route(
     hadith_id: str,
-    current_user = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     try:
@@ -345,18 +356,18 @@ async def toggle_favorite_route(
     count = await crud_hadith.get_favorites_count(db, obj_id)
     return {"id": hadith_id, "favorites": count}
 
-@router.get("/hadith-categories", response_model=List[HadithCategoryRead])
+@router.get("/hadith-categories", response_model=None)
 async def list_categories(db: AsyncIOMotorDatabase = Depends(get_db)):
     categories = await crud_hadith.get_all_categories(db)
     return [HadithCategoryRead(**cat) for cat in categories]
 
-@router.post("/hadith-categories", response_model=HadithCategoryRead)
+@router.post("/hadith-categories", response_model=None)
 async def create_category_route(category_data: HadithCategoryCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     created = await crud_hadith.create_category(db, category_data.model_dump())
     return HadithCategoryRead(**created)
 
-@router.put("/hadith-categories/{category_id}", response_model=HadithCategoryRead)
-@router.patch("/hadith-categories/{category_id}", response_model=HadithCategoryRead)
+@router.put("/hadith-categories/{category_id}", response_model=None)
+@router.patch("/hadith-categories/{category_id}", response_model=None)
 async def update_category_route(
     category_id: str,
     category_data: HadithCategoryUpdate,
@@ -372,7 +383,7 @@ async def update_category_route(
         raise HTTPException(status_code=404, detail="Category not found")
     return HadithCategoryRead(**updated)
 
-@router.delete("/hadith-categories/{category_id}")
+@router.delete("/hadith-categories/{category_id}", response_model=None)
 async def delete_category_route(category_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         cat_obj_id = ObjectId(category_id)

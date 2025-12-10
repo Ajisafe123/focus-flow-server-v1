@@ -29,8 +29,18 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_S3_BUCKET: Optional[str] = None
     AWS_REGION: str = "us-east-1"
-    RESEND_API_KEY: str
-    EMAIL_FROM: str
+    # SMTP email (Brevo) – configure via environment variables
+    SMTP_HOST: str = Field("smtp-relay.brevo.com", env="SMTP_HOST")
+    SMTP_PORT: int = Field(587, env="SMTP_PORT")
+    SMTP_USERNAME: str = Field(..., env="SMTP_USERNAME")
+    SMTP_PASSWORD: str = Field(..., env="SMTP_PASSWORD")
+    EMAIL_FROM: str = Field(..., env="EMAIL_FROM")
+    BACKEND_URL: str = "http://localhost:8000"
+    FRONTEND_URL: str = "http://localhost:3000"
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+    FACEBOOK_APP_ID: str
+    FACEBOOK_APP_SECRET: str
     DEFAULT_LAT: float = 21.3891
     DEFAULT_LON: float = 39.8579
     DEFAULT_CITY: str = "Mecca"

@@ -5,9 +5,10 @@ from typing import Optional
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
 from ..config import settings
+from ..database import get_db
 import uuid
 
 # Password hashing
@@ -113,7 +114,10 @@ async def delete_user(db: AsyncIOMotorDatabase, user_id) -> bool:
     return result.deleted_count > 0
 
 
-async def get_current_user(token: str, db: AsyncIOMotorDatabase):
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
     """Get current authenticated user from JWT token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -142,7 +146,10 @@ async def get_current_user(token: str, db: AsyncIOMotorDatabase):
     return user
 
 
-async def get_optional_user(token: Optional[str], db: AsyncIOMotorDatabase) -> Optional[dict]:
+async def get_optional_user(
+    token: Optional[str] = Depends(optional_oauth2_scheme),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+) -> Optional[dict]:
     """Get optional authenticated user (returns None if not authenticated)"""
     if token is None:
         return None

@@ -1,16 +1,18 @@
 from pydantic import BaseModel
 from typing import Optional
-from uuid import UUID
 from datetime import datetime
 
+
 class ConversationCreate(BaseModel):
-    userId: Optional[UUID]
+    # Accept any string here; we will coerce to ObjectId in the router when valid.
+    userId: Optional[str]
     userName: Optional[str]
     userEmail: Optional[str]
 
+
 class ConversationOut(BaseModel):
-    id: UUID
-    user_id: Optional[UUID]
+    id: str
+    user_id: Optional[str]
     status: str
     created_at: datetime
     updated_at: datetime

@@ -221,3 +221,66 @@ class ArticleFavoriteInDB(BaseModel):
 
     class Config:
         populate_by_name = True
+
+
+# Shop Models
+class ShopCategoryInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(alias="_id")
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    slug: Optional[str] = None
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+
+
+class ProductInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(alias="_id")
+    name: str
+    description: str
+    price: float
+    currency: str = "USD"
+    image_urls: List[str] = []
+    category_id: Optional[PyObjectId] = None
+    is_active: bool = True
+    stock_quantity: int = 0
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+
+
+class OrderInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(alias="_id")
+    user_id: Optional[PyObjectId] = None
+    items: List[Dict[str, Any]]  # stores product_id, quantity, price_at_purchase
+    total_amount: float
+    currency: str = "USD"
+    status: str = "pending"  # pending, paid, shipped, cancelled
+    shipping_address: Optional[Dict[str, Any]] = None
+    payment_info: Optional[Dict[str, Any]] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+
+
+# Donation Models
+class DonationInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(alias="_id")
+    donor_name: Optional[str] = "Anonymous"
+    donor_email: Optional[str] = None
+    amount: float
+    currency: str = "USD"
+    message: Optional[str] = None
+    payment_method: Optional[str] = None
+    status: str = "completed"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True

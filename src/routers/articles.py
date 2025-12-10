@@ -6,11 +6,11 @@ from bson import ObjectId
 from ..database import get_db
 from ..utils import article as crud_article
 from ..utils.users import get_current_user, get_optional_user
+from ..utils.notifications import create_notifications
 from ..schemas.article import (
     ArticleRead, ArticleCreate, ArticleUpdate,
     ArticleCategoryRead, ArticleCategoryCreate, ArticleCategoryUpdate, ArticleStats, ArticleItem
 )
-from ..models.users import User
 import os
 import shutil
 import uuid
@@ -25,7 +25,7 @@ os.makedirs(CATEGORY_IMAGE_DIR, exist_ok=True)
 router = APIRouter(prefix="/api", tags=["Articles"])
 
 
-@router.get("/articles", response_model=List[ArticleRead])
+@router.get("/articles", response_model=None)
 async def list_articles(db: AsyncIOMotorDatabase = Depends(get_db)):
     """Get all articles"""
     articles = await crud_article.get_all_articles(db)
@@ -43,7 +43,7 @@ async def list_articles(db: AsyncIOMotorDatabase = Depends(get_db)):
     return articles_with_counts
 
 
-@router.get("/articles/paginated", response_model=List[ArticleRead])
+@router.get("/articles/paginated", response_model=None)
 async def list_articles_paginated(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1),
@@ -52,7 +52,7 @@ async def list_articles_paginated(
     q: Optional[str] = None,
     category_id: Optional[str] = None,
     featured: Optional[bool] = None,
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     """Get paginated articles with filtering"""
@@ -65,7 +65,7 @@ async def list_articles_paginated(
 
     user_favorites_set = set()
     if current_user:
-        user_favorites_set = await crud_article.get_user_favorites_set(db, current_user.id, article_ids)
+        user_favorites_set = await crud_article.get_user_favorites_set(db, current_user.get("_id"), article_ids)
     
     articles_with_counts = []
     for article in articles:
@@ -77,14 +77,26 @@ async def list_articles_paginated(
     return articles_with_counts
 
 
-@router.post("/articles", response_model=ArticleRead)
+@router.post("/articles", response_model=None)
 async def create_article_route(article_data: ArticleCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     """Create a new article"""
     article_dict = article_data.model_dump(exclude_unset=True)
-    return await crud_article.create_article(db, article_dict)
+    created = await crud_article.create_article(db, article_dict)
+    try:
+        await create_notifications(
+            db,
+            title="New article published",
+            message=created.title or "A new article is available",
+            notif_type="info",
+            user_ids=None,
+            link=f"/article/{created.id}",
+        )
+    except Exception:
+        pass
+    return created
 
 
-@router.get("/articles/stats", response_model=ArticleStats)
+@router.get("/articles/stats", response_model=None)
 async def get_articles_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     """Get articles statistics"""
     all_articles = await crud_article.get_all_articles(db)
@@ -122,7 +134,7 @@ async def get_articles_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     )
 
 
-@router.delete("/articles/bulk")
+@router.delete("/articles/bulk", response_model=None)
 async def delete_articles_bulk_route(
     article_ids: List[str],
     db: AsyncIOMotorDatabase = Depends(get_db)
@@ -139,7 +151,7 @@ async def delete_articles_bulk_route(
     return {"detail": f"{deleted_count} Articles deleted successfully."}
 
 
-@router.get("/articles/{article_id}", response_model=ArticleRead)
+@router.get("/articles/{article_id}", response_model=None)
 async def get_article_route(article_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     """Get a single article by ID"""
     article = await crud_article.get_article(db, article_id)
@@ -155,8 +167,8 @@ async def get_article_route(article_id: str, db: AsyncIOMotorDatabase = Depends(
     return article
 
 
-@router.put("/articles/{article_id}", response_model=ArticleRead)
-@router.patch("/articles/{article_id}", response_model=ArticleRead)
+@router.put("/articles/{article_id}", response_model=None)
+@router.patch("/articles/{article_id}", response_model=None)
 async def update_article_route(
     article_id: str,
     article_data: ArticleUpdate,
@@ -169,7 +181,7 @@ async def update_article_route(
     return updated
 
 
-@router.delete("/articles/{article_id}")
+@router.delete("/articles/{article_id}", response_model=None)
 async def delete_article_route(article_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     """Delete an article"""
     success = await crud_article.delete_article(db, article_id)
@@ -178,7 +190,7 @@ async def delete_article_route(article_id: str, db: AsyncIOMotorDatabase = Depen
     return {"detail": "Article deleted successfully"}
 
 
-@router.patch("/articles/{article_id}/featured")
+@router.patch("/articles/{article_id}/featured", response_model=None)
 async def toggle_featured_route(article_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     """Toggle featured status of an article"""
     article = await crud_article.get_article(db, article_id)
@@ -189,7 +201,7 @@ async def toggle_featured_route(article_id: str, db: AsyncIOMotorDatabase = Depe
     return {"id": str(updated.id), "featured": updated.featured}
 
 
-@router.patch("/articles/{article_id}/increment-view")
+@router.patch("/articles/{article_id}/increment-view", response_model=None)
 async def increment_view_route(article_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     """Increment view count for an article"""
     success = await crud_article.increment_view(db, article_id)
@@ -198,10 +210,10 @@ async def increment_view_route(article_id: str, db: AsyncIOMotorDatabase = Depen
     return {"id": article_id, "status": "view incremented"}
 
 
-@router.patch("/articles/{article_id}/toggle-favorite")
+@router.patch("/articles/{article_id}/toggle-favorite", response_model=None)
 async def toggle_favorite_route(
     article_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     """Toggle favorite status for a user"""
@@ -209,20 +221,20 @@ async def toggle_favorite_route(
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
     
-    success = await crud_article.toggle_favorite(db, article_id, current_user.id)
+    success = await crud_article.toggle_favorite(db, article_id, current_user.get("_id"))
     if not success:
         raise HTTPException(status_code=404, detail="Article not found")
     count = await crud_article.get_favorites_count(db, article_id)
     return {"id": article_id, "favorites": count}
 
 
-@router.get("/article-categories", response_model=List[ArticleCategoryRead])
+@router.get("/article-categories", response_model=None)
 async def list_categories(db: AsyncIOMotorDatabase = Depends(get_db)):
     """Get all article categories"""
     return await crud_article.get_all_categories(db)
 
 
-@router.post("/article-categories", response_model=ArticleCategoryRead)
+@router.post("/article-categories", response_model=None)
 async def create_category_route(
     category_data: ArticleCategoryCreate,
     db: AsyncIOMotorDatabase = Depends(get_db)
@@ -231,7 +243,7 @@ async def create_category_route(
     return await crud_article.create_category(db, category_data.model_dump(exclude_unset=True))
 
 
-@router.post("/article-categories/{category_id}/image-upload")
+@router.post("/article-categories/{category_id}/image-upload", response_model=None)
 async def upload_category_image_route(
     category_id: str,
     image_file: UploadFile = File(...),
@@ -281,8 +293,8 @@ async def upload_category_image_route(
     }
 
 
-@router.put("/article-categories/{category_id}", response_model=ArticleCategoryRead)
-@router.patch("/article-categories/{category_id}", response_model=ArticleCategoryRead)
+@router.put("/article-categories/{category_id}", response_model=None)
+@router.patch("/article-categories/{category_id}", response_model=None)
 async def update_category_route(
     category_id: str,
     category_data: ArticleCategoryUpdate,
@@ -295,7 +307,7 @@ async def update_category_route(
     return updated
 
 
-@router.delete("/article-categories/{category_id}")
+@router.delete("/article-categories/{category_id}", response_model=None)
 async def delete_category_route(category_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     """Delete an article category"""
     category = await crud_article.get_category(db, category_id)

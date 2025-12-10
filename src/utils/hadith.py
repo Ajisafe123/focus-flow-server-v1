@@ -277,6 +277,13 @@ async def get_paginated_hadiths(
     return hadiths_list, hadith_ids
 
 
+async def get_random_hadith(db: AsyncIOMotorDatabase) -> Optional[dict]:
+    """Return one random hadith document."""
+    cursor = db["hadiths"].aggregate([{"$sample": {"size": 1}}])
+    docs = [doc async for doc in cursor]
+    return docs[0] if docs else None
+
+
 async def get_all_categories(db: AsyncIOMotorDatabase) -> List[HadithCategoryInDB]:
     """Get all hadith categories"""
     categories = await db["hadith_categories"].find().sort("_id", 1).to_list(None)
@@ -332,3 +339,25 @@ async def delete_category(db: AsyncIOMotorDatabase, category_id) -> bool:
     
     result = await db["hadith_categories"].delete_one({"_id": category_id})
     return result.deleted_count > 0
+
+
+async def count_hadiths(db: AsyncIOMotorDatabase, q: Optional[str] = None, category_id: Optional[str] = None, featured: Optional[bool] = None) -> int:
+    """Count total hadiths matching filters"""
+    query = {}
+    
+    if q:
+        query["$text"] = {"$search": q}
+    
+    if category_id:
+        if isinstance(category_id, str):
+            try:
+                category_id = ObjectId(category_id)
+            except:
+                pass
+        query["category_id"] = category_id
+    
+    if featured is not None:
+        query["featured"] = featured
+    
+    count = await db["hadiths"].count_documents(query)
+    return count

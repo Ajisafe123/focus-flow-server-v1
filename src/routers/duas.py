@@ -7,6 +7,7 @@ from bson import ObjectId
 from ..database import get_db
 from ..utils import dua as crud_dua
 from ..utils.users import get_current_user, get_optional_user
+from ..utils.notifications import create_notifications
 from ..schemas.dua import (
     DuaRead, DuaCreate, DuaUpdate,
     CategoryRead, CategoryCreate, CategoryUpdate, DuaStats, DuaItem, DuaReadSegmented
@@ -36,7 +37,7 @@ SHARE_BASE_URL = "https://focus-flow-server-v1.onrender.com/api/s/"
 FRONTEND_BASE_URL = "https://nibrasudeen.vercel.app"
 
 
-@router.post("/duas/{dua_id}/share-link", response_model=ShareLinkResponse)
+@router.post("/duas/{dua_id}/share-link", response_model=None)
 async def generate_dua_share_link(dua_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(dua_id)
@@ -55,7 +56,7 @@ async def generate_dua_share_link(dua_id: str, db: AsyncIOMotorDatabase = Depend
     return {"share_url": full_share_url}
 
 
-@router.get("/s/{short_code}")
+@router.get("/s/{short_code}", response_model=None)
 async def redirect_to_dua_page(short_code: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     dua_id = await crud_dua.get_dua_id_by_short_code(db, short_code)
     
@@ -66,7 +67,7 @@ async def redirect_to_dua_page(short_code: str, db: AsyncIOMotorDatabase = Depen
     return RedirectResponse(url=target_url, status_code=307)
 
 
-@router.get("/duas", response_model=List[DuaRead])
+@router.get("/duas", response_model=None)
 async def list_duas(db: AsyncIOMotorDatabase = Depends(get_db)):
     duas, views_map, favorites_map = await crud_dua.get_all_duas_with_counts(db)
 
@@ -79,7 +80,7 @@ async def list_duas(db: AsyncIOMotorDatabase = Depends(get_db)):
     return duas_with_counts
 
 
-@router.get("/duas/paginated", response_model=List[DuaRead])
+@router.get("/duas/paginated", response_model=None)
 async def list_duas_paginated(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1),
@@ -88,7 +89,7 @@ async def list_duas_paginated(
     q: Optional[str] = None,
     category_id: Optional[str] = None,
     featured: Optional[bool] = None,
-    current_user = Depends(get_optional_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     duas, dua_ids = await crud_dua.get_paginated_duas(db, page, limit, sort_by, sort_order, q, category_id, featured)
@@ -111,13 +112,25 @@ async def list_duas_paginated(
     return duas_with_counts
 
 
-@router.post("/duas", response_model=DuaRead)
+@router.post("/duas", response_model=None)
 async def create_dua_route(dua_data: DuaCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     created = await crud_dua.create_dua(db, dua_data.model_dump())
+    # broadcast notification to everyone
+    try:
+        await create_notifications(
+            db,
+            title="New dua added",
+            message=f"{dua_data.title} is now available.",
+            notif_type="info",
+            user_ids=None,
+            link=f"/dua/{created.get('_id')}",
+        )
+    except Exception:
+        pass
     return DuaRead(**created)
 
 
-@router.get("/duas/stats", response_model=DuaStats)
+@router.get("/duas/stats", response_model=None)
 async def get_duas_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     all_duas = await crud_dua.get_all_duas(db)
     
@@ -159,7 +172,7 @@ async def get_duas_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     )
 
 
-@router.delete("/duas/bulk")
+@router.delete("/duas/bulk", response_model=None)
 async def delete_duas_bulk_route(
     dua_ids: List[str], 
     db: AsyncIOMotorDatabase = Depends(get_db)
@@ -180,7 +193,7 @@ async def delete_duas_bulk_route(
     return {"detail": f"{deleted_count} Duas deleted successfully."}
 
 
-@router.post("/duas/bulk-data-upload")
+@router.post("/duas/bulk-data-upload", response_model=None)
 async def bulk_data_upload_route(
     file: UploadFile = File(...),
     category_id: Optional[str] = Form(None), 
@@ -250,7 +263,7 @@ async def bulk_data_upload_route(
         raise HTTPException(status_code=500, detail=f"File processing error: {e}")
 
 
-@router.post("/categories/{category_id}/audio-update")
+@router.post("/categories/{category_id}/audio-update", response_model=None)
 async def bulk_audio_update_by_category_route(
     category_id: str,
     audio_file: UploadFile = File(...), 
@@ -296,7 +309,7 @@ async def bulk_audio_update_by_category_route(
     }
 
 
-@router.get("/duas/{dua_id}", response_model=DuaRead)
+@router.get("/duas/{dua_id}", response_model=None)
 async def get_dua_route(dua_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(dua_id)
@@ -316,7 +329,7 @@ async def get_dua_route(dua_id: str, db: AsyncIOMotorDatabase = Depends(get_db))
     return DuaRead(**dua)
 
 
-@router.get("/duas/{dua_id}/segments", response_model=DuaReadSegmented)
+@router.get("/duas/{dua_id}/segments", response_model=None)
 async def get_dua_segments_route(dua_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(dua_id)
@@ -344,17 +357,23 @@ async def get_dua_segments_route(dua_id: str, db: AsyncIOMotorDatabase = Depends
     return DuaReadSegmented(**response_data)
 
 
-@router.get("/categories/{category_id}/full-segments")
+@router.get("/categories/{category_id}/full-segments", response_model=None)
 async def get_category_full_segments_route(category_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+    # Accept both ObjectId and plain ints/strings; return empty on failure instead of 400.
+    cat_obj_id = None
     try:
         cat_obj_id = ObjectId(category_id)
-    except:
-        raise HTTPException(status_code=400, detail="Invalid category ID")
-    
-    duas = await crud_dua.get_duas_by_category_id(db, cat_obj_id)
+    except Exception:
+        # allow numeric categories; try as int match on a field if needed
+        cat_obj_id = category_id
+
+    try:
+        duas = await crud_dua.get_duas_by_category_id(db, cat_obj_id)
+    except Exception:
+        duas = []
     
     if not duas:
-        raise HTTPException(status_code=404, detail="Category not found or no Duas associated.")
+        return {"arabic_segments": []}
     
     full_segment_list = []
     
@@ -365,8 +384,8 @@ async def get_category_full_segments_route(category_id: str, db: AsyncIOMotorDat
     return {"arabic_segments": full_segment_list}
 
 
-@router.put("/duas/{dua_id}", response_model=DuaRead)
-@router.patch("/duas/{dua_id}", response_model=DuaRead)
+@router.put("/duas/{dua_id}", response_model=None)
+@router.patch("/duas/{dua_id}", response_model=None)
 async def update_dua_route(
     dua_id: str,
     dua_data: DuaUpdate,
@@ -383,7 +402,7 @@ async def update_dua_route(
     return DuaRead(**updated)
 
 
-@router.delete("/duas/{dua_id}")
+@router.delete("/duas/{dua_id}", response_model=None)
 async def delete_dua_route(dua_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(dua_id)
@@ -396,7 +415,7 @@ async def delete_dua_route(dua_id: str, db: AsyncIOMotorDatabase = Depends(get_d
     return {"detail": "Dua deleted successfully"}
 
 
-@router.patch("/duas/{dua_id}/featured")
+@router.patch("/duas/{dua_id}/featured", response_model=None)
 async def toggle_featured_route(dua_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(dua_id)
@@ -413,7 +432,7 @@ async def toggle_featured_route(dua_id: str, db: AsyncIOMotorDatabase = Depends(
     return {"id": dua_id, "featured": updated.get("featured")}
 
 
-@router.patch("/duas/{dua_id}/increment-view")
+@router.patch("/duas/{dua_id}/increment-view", response_model=None)
 async def increment_view_route(dua_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         obj_id = ObjectId(dua_id)
@@ -426,10 +445,10 @@ async def increment_view_route(dua_id: str, db: AsyncIOMotorDatabase = Depends(g
     return {"id": dua_id, "status": "view incremented"}
 
 
-@router.patch("/duas/{dua_id}/toggle-favorite")
+@router.patch("/duas/{dua_id}/toggle-favorite", response_model=None)
 async def toggle_favorite_route(
     dua_id: str,
-    current_user = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     try:
@@ -446,18 +465,18 @@ async def toggle_favorite_route(
     return {"id": dua_id, "favorites": count}
 
 
-@router.get("/dua-categories", response_model=List[CategoryRead])
+@router.get("/dua-categories", response_model=None)
 async def list_dua_categories(db: AsyncIOMotorDatabase = Depends(get_db)):
     return [CategoryRead(**cat) for cat in await crud_dua.get_all_categories(db)]
 
 
-@router.post("/dua-categories", response_model=CategoryRead)
+@router.post("/dua-categories", response_model=None)
 async def create_dua_category_route(category_data: CategoryCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     created = await crud_dua.create_category(db, category_data.model_dump())
     return CategoryRead(**created)
 
 
-@router.post("/dua-categories/{category_id}/image-upload")
+@router.post("/dua-categories/{category_id}/image-upload", response_model=None)
 async def upload_category_image_route(
     category_id: str,
     image_file: UploadFile = File(...), 
@@ -513,8 +532,8 @@ async def upload_category_image_route(
     }
 
 
-@router.put("/dua-categories/{category_id}", response_model=CategoryRead)
-@router.patch("/dua-categories/{category_id}", response_model=CategoryRead)
+@router.put("/dua-categories/{category_id}", response_model=None)
+@router.patch("/dua-categories/{category_id}", response_model=None)
 async def update_dua_category_route(
     category_id: str,
     category_data: CategoryUpdate,
@@ -531,7 +550,7 @@ async def update_dua_category_route(
     return CategoryRead(**updated)
 
 
-@router.delete("/dua-categories/{category_id}")
+@router.delete("/dua-categories/{category_id}", response_model=None)
 async def delete_dua_category_route(category_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         cat_obj_id = ObjectId(category_id)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Body
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from typing import List, Optional
@@ -13,16 +13,20 @@ from ..utils.ws_manager import manager
 router = APIRouter(prefix="/api/messages", tags=["Messages"])
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 
-@router.post("", response_model=dict)
+@router.post("", response_model=None)
 async def send_message(
-    payload: MessageCreate,
+    payload: dict | None = Body(default=None),
     file: Optional[UploadFile] = File(None),
     background_tasks: BackgroundTasks = None,
-    db: AsyncIOMotorDatabase = Depends(get_db)
+    db: AsyncIOMotorDatabase = Depends(get_db),
 ):
+    body = payload or {}
+    conv_id_raw = body.get("conversationId")
+    if not conv_id_raw:
+        raise HTTPException(status_code=400, detail="conversationId is required")
     try:
-        conv_id = ObjectId(payload.conversationId)
-    except:
+        conv_id = ObjectId(conv_id_raw)
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid conversationId")
 
     conversations_collection = db["conversations"]
@@ -30,7 +34,7 @@ async def send_message(
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    file_url = payload.fileUrl
+    file_url = body.get("fileUrl")
     if file:
         contents = await file.read()
         if len(contents) == 0 or len(contents) > MAX_UPLOAD_SIZE:
@@ -39,12 +43,17 @@ async def send_message(
         file_url = generate_presigned_url(key, expires_in=3600*24)
 
     messages_collection = db["messages"]
+    message_text = body.get("text") or ""
+    sender_type = body.get("senderType") or "user"
+    sender_id = body.get("senderId")
+    message_type = body.get("messageType") or ("audio" if file else "text")
+
     msg_data = {
         "conversation_id": conv_id,
-        "message_text": payload.text,
-        "sender_type": payload.senderType,
-        "sender_id": payload.senderId,
-        "message_type": payload.messageType or ("audio" if file else "text"),
+        "message_text": message_text,
+        "sender_type": sender_type,
+        "sender_id": sender_id,
+        "message_type": message_type,
         "file_url": file_url,
         "status": "sent",
         "created_at": datetime.utcnow().isoformat(),
@@ -87,7 +96,7 @@ async def send_message(
         "created_at": msg_data["created_at"]
     }
 
-@router.get("/{conversation_id}/messages", response_model=List[dict])
+@router.get("/{conversation_id}/messages", response_model=None)
 async def get_messages(conversation_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         conv_id = ObjectId(conversation_id)
@@ -111,7 +120,7 @@ async def get_messages(conversation_id: str, db: AsyncIOMotorDatabase = Depends(
         "updated_at": m.get("updated_at")
     } for m in msgs]
 
-@router.put("/read")
+@router.put("/read", response_model=None)
 async def mark_as_read(
     conversationId: str,
     messageIds: List[str],
@@ -131,7 +140,7 @@ async def mark_as_read(
     
     return {"ok": True}
 
-@router.put("/{message_id}")
+@router.put("/{message_id}", response_model=None)
 async def update_message(
     message_id: str,
     text: Optional[str] = Form(None),
@@ -175,7 +184,7 @@ async def update_message(
         "created_at": msg.get("created_at")
     }
 
-@router.delete("/{message_id}")
+@router.delete("/{message_id}", response_model=None)
 async def delete_message(message_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
         msg_id = ObjectId(message_id)

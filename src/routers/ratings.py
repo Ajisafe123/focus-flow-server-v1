@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from datetime import datetime
+from typing import Optional
 from ..database import get_db
 from ..schemas.rating import RatingCreate
 from ..utils.users import get_current_user
@@ -9,11 +10,11 @@ from ..utils.users import get_current_user
 router = APIRouter(prefix="/api/ratings", tags=["Ratings"])
 
 
-@router.post("")
+@router.post("", response_model=None)
 async def submit_rating(
     payload: RatingCreate,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     if payload.rating < 1 or payload.rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")

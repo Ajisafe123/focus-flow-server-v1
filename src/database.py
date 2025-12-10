@@ -1,18 +1,19 @@
 import motor.motor_asyncio
+from motor.motor_asyncio import AsyncIOMotorClient
 from src.config import settings
 from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
 
-client: Optional[motor.motor_asyncio.AsyncClient] = None
+client: Optional[AsyncIOMotorClient] = None
 db = None
 
 async def connect_to_mongo():
     """Establish MongoDB connection"""
     global client, db
     try:
-        client = motor.motor_asyncio.AsyncClient(
+        client = motor.motor_asyncio.AsyncIOMotorClient(
             settings.DATABASE_URL,
             serverSelectionTimeoutMS=5000,
             retryWrites=True,

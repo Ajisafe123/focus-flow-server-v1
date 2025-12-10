@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/files", tags=["Files"])
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", settings.__dict__.get("MAX_UPLOAD_SIZE", 10 * 1024 * 1024)))
 
 
-@router.post("/upload")
+@router.post("/upload", response_model=None)
 async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
