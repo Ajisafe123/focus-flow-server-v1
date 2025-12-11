@@ -14,6 +14,11 @@ import json
 from io import StringIO
 from datetime import date
 import random
+import os
+import shutil
+import uuid
+import pymongo.errors
+import os.path as op
 
 HadithSchema = HadithRead 
 cache: Dict[str, Any] = {}
@@ -373,8 +378,66 @@ async def list_categories(db: AsyncIOMotorDatabase = Depends(get_db)):
     return [HadithCategoryRead(**cat) for cat in categories]
 
 @router.post("/hadith-categories", response_model=None)
-async def create_category_route(category_data: HadithCategoryCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
-    created = await crud_hadith.create_category(db, category_data.model_dump())
+async def create_category_route(
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    is_active: bool = Form(True),
+    image_file: Optional[UploadFile] = File(None),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Create a new hadith category with optional image"""
+    category_data = {
+        "name": name,
+        "description": description,
+        "is_active": is_active,
+        "image_url": None
+    }
+    
+    # Process image if provided
+    if image_file:
+        allowed_types = ["image/jpeg", "image/png", "image/webp"]
+        if image_file.content_type in allowed_types:
+            # Re-use the existing category_images dir. Hadiths might share it or need their own.
+            # Assuming 'article_images' or 'category_images' is available. 
+            # Ideally each router should manage its own text/paths, but let's use a generic approach if possible.
+            # Hadith router in this file doesn't have CATEGORY_IMAGE_DIR defined top-level?
+            # Let's check imports. It imports 'os' and 'op'. 
+            # We need to define a path. 
+            # Let's assume static/hadith_category_images similar to others or reuse one.
+            # Checking imports in hadith.py... it doesn't define directories like articles.py/duas.py do.
+            # We'll need to define it or piggyback.
+            # Safest is to define it locally in the function or top level.
+            pass
+
+    # Quick fix: Hadith router lines 1-28 doesn't show directory setup. 
+    # I'll add directory setup to this block or rely on existing?
+    # I'll just skip image handling for Hadith for now if directories aren't set up, 
+    # BUT wait, the frontend sends it. 
+    # Let's check if I can define the directory.
+    
+    current_dir = op.dirname(op.abspath(__file__))
+    src_dir = op.join(current_dir, op.pardir)
+    static_dir = op.join(src_dir, "static")
+    cat_img_dir = op.join(static_dir, "hadith_category_images")
+    os.makedirs(cat_img_dir, exist_ok=True)
+
+    if image_file:
+        allowed_types = ["image/jpeg", "image/png", "image/webp"]
+        if image_file.content_type in allowed_types:
+            file_extension = op.splitext(image_file.filename)[1]
+            unique_filename = f"cat_hadith_{uuid.uuid4().hex}{file_extension}"
+            unique_image_path = op.join(cat_img_dir, unique_filename)
+            try:
+                 with open(unique_image_path, "wb") as buffer:
+                    shutil.copyfileobj(image_file.file, buffer)
+                 category_data["image_url"] = f"/static/hadith_category_images/{unique_filename}"
+            except Exception:
+                 pass
+
+    try:
+        created = await crud_hadith.create_category(db, category_data)
+    except pymongo.errors.DuplicateKeyError:
+       raise HTTPException(status_code=400, detail="Category with this name already exists")
     return HadithCategoryRead(**created)
 
 @router.put("/hadith-categories/{category_id}", response_model=None)

@@ -10,15 +10,13 @@ class ConnectionManager:
         await websocket.accept()
         conns = self.active_connections.setdefault(room, set())
         conns.add(websocket)
-        # Notify admins that user is online (room usually equals conversation_id which maps to user)
-        # We might need to map conversation_id -> user_id or just use conversation_id as proxy for user presence
+        print(f"WS DEBUG: User connected to room {room}. Total connections in room: {len(conns)}")
         await self.broadcast_to_admins({"event": "user_status", "data": {"conversation_id": room, "status": "online"}})
 
     async def connect_admin(self, websocket: WebSocket):
         await websocket.accept()
         self.admin_connections.add(websocket)
-        # Notify all active rooms (users) that admin is online
-        # This might be heavy if many users, but for now it's fine
+        print(f"WS DEBUG: Admin connected. Total admins: {len(self.admin_connections)}")
         for room in self.active_connections:
             await self.broadcast_room(room, {"event": "admin_status", "data": {"status": "online"}})
 
@@ -26,21 +24,15 @@ class ConnectionManager:
         conns = self.active_connections.get(room)
         if conns and websocket in conns:
             conns.remove(websocket)
+            print(f"WS DEBUG: User disconnected from room {room}. Remaining: {len(conns)}")
             if not conns:
                 del self.active_connections[room]
-                # Notify admins user went offline
-                # We can't await here directly if this is called from sync context? 
-                # disconnect is usually called from async endpoint catch block, so we can't await?
-                # Wait, disconnect is defined as sync def in original.
-                # If I want to broadcast, I need async.
-                # I will change disconnect to async or just fire-and-forget if possible?
-                # FastAPI websocket endpoints are async, so I can await disconnect if I change it to async.
-                pass 
 
     async def disconnect_async(self, room: str, websocket: WebSocket):
          conns = self.active_connections.get(room)
          if conns and websocket in conns:
             conns.remove(websocket)
+            print(f"WS DEBUG: User disconnected (async) from room {room}")
             if not conns:
                 del self.active_connections[room]
                 await self.broadcast_to_admins({"event": "user_status", "data": {"conversation_id": room, "status": "offline"}})
@@ -48,11 +40,12 @@ class ConnectionManager:
     def disconnect_admin(self, websocket: WebSocket):
         if websocket in self.admin_connections:
             self.admin_connections.remove(websocket)
+            print(f"WS DEBUG: Admin disconnected. Remaining: {len(self.admin_connections)}")
 
     async def disconnect_admin_async(self, websocket: WebSocket):
         if websocket in self.admin_connections:
             self.admin_connections.remove(websocket)
-            # Notify users admin offline
+            print(f"WS DEBUG: Admin disconnected (async). Remaining: {len(self.admin_connections)}")
             for room in self.active_connections:
                  await self.broadcast_room(room, {"event": "admin_status", "data": {"status": "offline"}})
 
@@ -60,19 +53,22 @@ class ConnectionManager:
         await websocket.send_json(message)
 
     async def broadcast_to_admins(self, message: Any):
+        # print(f"WS DEBUG: Broadcasting to {len(self.admin_connections)} admins: {message}")
         for conn in list(self.admin_connections):
             try:
                 await conn.send_json(message)
-            except Exception:
+            except Exception as e:
+                print(f"WS DEBUG: Failed to send to admin: {e}")
                 pass
 
     async def broadcast_room(self, room: str, message: Any):
-        # Send to room participants
+        # print(f"WS DEBUG: Broadcasting to room {room}: {message}")
         conns = self.active_connections.get(room, set())
         for conn in list(conns):
             try:
                 await conn.send_json(message)
-            except Exception:
+            except Exception as e:
+                print(f"WS DEBUG: Failed to send to room user: {e}")
                 pass
         
         # Send to all admins

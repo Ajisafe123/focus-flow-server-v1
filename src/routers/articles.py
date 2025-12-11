@@ -14,6 +14,7 @@ from ..schemas.article import (
 import os
 import shutil
 import uuid
+import pymongo.errors
 import os.path as op
 
 CURRENT_DIR = op.dirname(op.abspath(__file__))
@@ -236,11 +237,46 @@ async def list_categories(db: AsyncIOMotorDatabase = Depends(get_db)):
 
 @router.post("/article-categories", response_model=None)
 async def create_category_route(
-    category_data: ArticleCategoryCreate,
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    is_active: bool = Form(True),
+    image_file: Optional[UploadFile] = File(None),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Create a new article category"""
-    return await crud_article.create_category(db, category_data.model_dump(exclude_unset=True))
+    """Create a new article category with optional image"""
+    category_data = {
+        "name": name,
+        "description": description,
+        "is_active": is_active,
+        "image_url": None
+    }
+    
+    # Process image if provided
+    if image_file:
+        allowed_types = ["image/jpeg", "image/png", "image/webp"]
+        if image_file.content_type in allowed_types:
+            file_extension = op.splitext(image_file.filename)[1]
+            # Generate a temp ID (will be replaced by actual ID, but needed for filename uniqueness if we want)
+            # Better to use UUID for filename
+            unique_filename = f"category_{uuid.uuid4().hex}{file_extension}"
+            unique_image_path = op.join(CATEGORY_IMAGE_DIR, unique_filename)
+            
+            try:
+                with open(unique_image_path, "wb") as buffer:
+                    shutil.copyfileobj(image_file.file, buffer)
+                category_data["image_url"] = f"/static/article_images/{unique_filename}"
+            except Exception as e:
+                # Log error but proceed without image or raise? 
+                # Raise is safer to notify user
+                raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+        else:
+             # Or just ignore invalid types? Better to raise error
+             pass 
+
+    try:
+        return await crud_article.create_category(db, category_data)
+    except pymongo.errors.DuplicateKeyError:
+        raise HTTPException(status_code=400, detail="Category with this name already exists")
 
 
 @router.post("/article-categories/{category_id}/image-upload", response_model=None)

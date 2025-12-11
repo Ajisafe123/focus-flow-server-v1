@@ -18,6 +18,7 @@ import csv
 import json
 from io import StringIO
 import uuid
+import pymongo.errors
 import os.path as op
 
 CURRENT_DIR = op.dirname(op.abspath(__file__))
@@ -467,12 +468,50 @@ async def toggle_favorite_route(
 
 @router.get("/dua-categories", response_model=None)
 async def list_dua_categories(db: AsyncIOMotorDatabase = Depends(get_db)):
-    return [CategoryRead(**cat) for cat in await crud_dua.get_all_categories(db)]
+    cats = await crud_dua.get_all_categories(db)
+    print(f"DEBUG: Found {len(cats)} dua categories")
+    return [CategoryRead(**cat.model_dump()) for cat in cats]
 
 
 @router.post("/dua-categories", response_model=None)
-async def create_dua_category_route(category_data: CategoryCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
-    created = await crud_dua.create_category(db, category_data.model_dump())
+async def create_dua_category_route(
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    is_active: bool = Form(True),
+    image_file: Optional[UploadFile] = File(None),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Create a new dua category with optional image"""
+    category_data = {
+        "name": name,
+        "description": description,
+        "is_active": is_active,
+        "image_url": None
+    }
+    
+    # Process image if provided
+    if image_file:
+        allowed_types = ["image/jpeg", "image/png", "image/webp"]
+        if image_file.content_type in allowed_types:
+            file_extension = op.splitext(image_file.filename)[1]
+            unique_filename = f"category_{uuid.uuid4().hex}{file_extension}"
+            unique_image_path = op.join(CATEGORY_IMAGE_DIR, unique_filename)
+            
+            try:
+                with open(unique_image_path, "wb") as buffer:
+                    shutil.copyfileobj(image_file.file, buffer)
+                category_data["image_url"] = f"/static/category_images/{unique_filename}"
+            except Exception as e:
+                # Log error but proceed without image or raise
+                raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+        else:
+             pass 
+
+    try:
+        created = await crud_dua.create_category(db, category_data)
+    except pymongo.errors.DuplicateKeyError:
+        raise HTTPException(status_code=400, detail="Category with this name already exists")
+    
     return CategoryRead(**created)
 
 

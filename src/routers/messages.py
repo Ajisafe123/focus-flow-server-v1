@@ -64,22 +64,21 @@ async def send_message(
 
     temp_id = body.get("tempId")
 
-    if background_tasks:
-        background_tasks.add_task(
-            manager.broadcast_room, str(conv_id),
-            {"event": "receive_message", "data": {
-                "id": str(result.inserted_id),
-                "tempId": temp_id,
-                "conversation_id": str(conv_id),
-                "sender_type": msg_data["sender_type"],
-                "sender_id": msg_data["sender_id"],
-                "message_text": msg_data["message_text"],
-                "message_type": msg_data["message_type"],
-                "file_url": msg_data["file_url"],
-                "status": msg_data["status"],
-                "created_at": msg_data["created_at"]
-            }}
-        )
+    # Broadcast immediately to ensure real-time delivery
+    await manager.broadcast_room(str(conv_id),
+        {"event": "receive_message", "data": {
+            "id": str(result.inserted_id),
+            "tempId": temp_id,
+            "conversation_id": str(conv_id),
+            "sender_type": msg_data["sender_type"],
+            "sender_id": msg_data["sender_id"],
+            "message_text": msg_data["message_text"],
+            "message_type": msg_data["message_type"],
+            "file_url": msg_data["file_url"],
+            "status": msg_data["status"],
+            "created_at": msg_data["created_at"]
+        }}
+    )
 
     # Notify admin if message is from user
     if msg_data["sender_type"] == "user":

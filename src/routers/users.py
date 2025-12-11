@@ -1,14 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime, timedelta
 import secrets
 import httpx
 from fastapi.responses import JSONResponse, RedirectResponse
 from ..database import get_db
-from ..utils import users as crud_users
-from ..utils.notifications import create_notifications
-from ..services.email_service import send_password_reset_email, send_login_notification
-from ..config import settings
 from ..schemas.users import (
     UserCreate,
     UserLogin,
@@ -16,14 +12,17 @@ from ..schemas.users import (
     VerifyCodeRequest,
     ResetPasswordRequest,
     UserUpdate,
-    Token,
     UserResponse,
 )
+from ..utils import users as crud_users
+from ..utils.notifications import create_notifications
+from ..services.email_service import send_password_reset_email, send_login_notification
+from ..config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register")
-async def register(user_data: UserCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db: AsyncIOMotorDatabase = Depends(get_db)):
     if await crud_users.get_user_by_username(db, user_data.username):
         raise HTTPException(status_code=400, detail="Username already registered")
     if await crud_users.get_user_by_email(db, user_data.email):
@@ -38,10 +37,7 @@ async def register(user_data: UserCreate, db: AsyncIOMotorDatabase = Depends(get
         "verification_code_expires_at": datetime.utcnow() + timedelta(minutes=15)
     }
     await crud_users.create_user(db, user_dict)
-    try:
-        await send_password_reset_email(user_data.email, code)
-    except:
-        pass
+    background_tasks.add_task(send_password_reset_email, user_data.email, code)
     return {"message": "Check your email for verification code", "email": user_data.email}
 
 @router.post("/verify-email")
@@ -63,7 +59,7 @@ async def verify_email(req: VerifyCodeRequest, db: AsyncIOMotorDatabase = Depend
 
 
 @router.post("/resend-verification")
-async def resend_verification(req: ForgotPasswordRequest, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def resend_verification(req: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: AsyncIOMotorDatabase = Depends(get_db)):
     """Resend verification code to the user's email."""
     user = await crud_users.get_user_by_email(db, req.email)
     if not user:
@@ -78,15 +74,12 @@ async def resend_verification(req: ForgotPasswordRequest, db: AsyncIOMotorDataba
         "verification_code_expires_at": datetime.utcnow() + timedelta(minutes=15)
     })
     
-    try:
-        await send_password_reset_email(req.email, code)
-    except:
-        pass
+    background_tasks.add_task(send_password_reset_email, req.email, code)
         
     return {"message": "Verification code resent"}
 
 @router.post("/login")
-async def login(user_data: UserLogin, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def login(user_data: UserLogin, background_tasks: BackgroundTasks, db: AsyncIOMotorDatabase = Depends(get_db)):
     user = await crud_users.authenticate_user(db, user_data.identifier, user_data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -96,10 +89,7 @@ async def login(user_data: UserLogin, db: AsyncIOMotorDatabase = Depends(get_db)
             "verification_code": code,
             "verification_code_expires_at": datetime.utcnow() + timedelta(minutes=15)
         })
-        try:
-            await send_password_reset_email(user["email"], code)
-        except:
-            pass
+        background_tasks.add_task(send_password_reset_email, user["email"], code)
         return JSONResponse(
             status_code=403,
             content={
@@ -110,7 +100,8 @@ async def login(user_data: UserLogin, db: AsyncIOMotorDatabase = Depends(get_db)
             }
         )
     token = crud_users.create_access_token({"sub": str(user["_id"])})
-    # fire-and-forget login notification + email
+    
+    # fire-and-forget login notification + email via BackgroundTasks
     try:
         await create_notifications(
             db,
@@ -119,9 +110,8 @@ async def login(user_data: UserLogin, db: AsyncIOMotorDatabase = Depends(get_db)
             notif_type="info",
             user_ids=[str(user["_id"])],
         )
-        await send_login_notification(user["email"])
+        background_tasks.add_task(send_login_notification, user["email"])
     except Exception:
-        # avoid blocking login on notification failure
         pass
 
     return {
@@ -133,16 +123,13 @@ async def login(user_data: UserLogin, db: AsyncIOMotorDatabase = Depends(get_db)
     }
 
 @router.post("/forgot-password")
-async def forgot_password(req: ForgotPasswordRequest, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def forgot_password(req: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: AsyncIOMotorDatabase = Depends(get_db)):
     user = await crud_users.get_user_by_email(db, req.email)
     if not user:
         return {"message": "If the email exists, a reset code was sent"}
     code = secrets.token_hex(3).upper()
     await crud_users.create_password_reset_code(db, user["_id"], code)
-    try:
-        await send_password_reset_email(req.email, code)
-    except:
-        pass
+    background_tasks.add_task(send_password_reset_email, req.email, code)
     return {"message": "Reset code sent to email"}
 
 @router.post("/verify-code")
