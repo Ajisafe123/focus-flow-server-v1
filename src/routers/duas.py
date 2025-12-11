@@ -73,10 +73,13 @@ async def list_duas(db: AsyncIOMotorDatabase = Depends(get_db)):
     duas, views_map, favorites_map = await crud_dua.get_all_duas_with_counts(db)
 
     duas_with_counts = []
+    duas_with_counts = []
     for dua in duas:
-        dua["view_count"] = views_map.get(str(dua["_id"]), 0)
-        dua["favorite_count"] = favorites_map.get(str(dua["_id"]), 0)
-        duas_with_counts.append(DuaRead(**dua))
+        # Convert Pydantic model to dict to inject counts
+        dua_dict = dua.model_dump(by_alias=True)
+        dua_dict["view_count"] = views_map.get(str(dua.id), 0)
+        dua_dict["favorite_count"] = favorites_map.get(str(dua.id), 0)
+        duas_with_counts.append(DuaRead(**dua_dict))
         
     return duas_with_counts
 
@@ -104,11 +107,13 @@ async def list_duas_paginated(
         user_favorites_set = await crud_dua.get_user_favorites_set(db, user_uuid, dua_ids)
     
     duas_with_counts = []
+    duas_with_counts = []
     for dua in duas:
-        dua["view_count"] = views_map.get(str(dua["_id"]), 0)
-        dua["favorite_count"] = favorites_map.get(str(dua["_id"]), 0)
-        dua["is_favorite"] = str(dua["_id"]) in user_favorites_set
-        duas_with_counts.append(DuaRead(**dua))
+        dua_dict = dua.model_dump(by_alias=True)
+        dua_dict["view_count"] = views_map.get(str(dua.id), 0)
+        dua_dict["favorite_count"] = favorites_map.get(str(dua.id), 0)
+        dua_dict["is_favorite"] = str(dua.id) in user_favorites_set
+        duas_with_counts.append(DuaRead(**dua_dict))
 
     return duas_with_counts
 
@@ -136,7 +141,10 @@ async def get_duas_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     all_duas = await crud_dua.get_all_duas(db)
     
     total_duas = len(all_duas)
-    dua_ids = [dua["_id"] for dua in all_duas]
+    # Convert Pydantic models to dicts if needed
+    dua_dicts = [dua.model_dump() if hasattr(dua, 'model_dump') else dua for dua in all_duas]
+    # Safely get IDs
+    dua_ids = [d.get("_id") or d.get("id") for d in dua_dicts if d.get("_id") or d.get("id")]
 
     views_map = await crud_dua.get_views_bulk(db, dua_ids)
     favorites_map = await crud_dua.get_favorites_bulk(db, dua_ids)
@@ -144,22 +152,22 @@ async def get_duas_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     total_views = sum(views_map.get(str(dua_id), 0) for dua_id in dua_ids)
     total_favorites = sum(favorites_map.get(str(dua_id), 0) for dua_id in dua_ids)
 
-    featured_duas = [d for d in all_duas if d.get("featured")]
+    featured_duas = [d for d in dua_dicts if d.get("featured")]
     
     def safe_dua_item(d):
         return DuaItem(
-            id=d.get("_id"),
+            id=d.get("_id") or d.get("id"),
             title=d.get("title") or "No Title"
         )
 
     top_featured = sorted(
-        [(d, views_map.get(str(d["_id"]), 0)) for d in featured_duas],
+        [(d, views_map.get(str(d.get("_id") or d.get("id")), 0)) for d in featured_duas if d.get("_id") or d.get("id")],
         key=lambda x: x[1],
         reverse=True
     )[:5]
     
     top_viewed = sorted(
-        [(d, views_map.get(str(d["_id"]), 0)) for d in all_duas],
+        [(d, views_map.get(str(d.get("_id") or d.get("id")), 0)) for d in dua_dicts if d.get("_id") or d.get("id")],
         key=lambda x: x[1],
         reverse=True
     )[:5]
@@ -512,7 +520,7 @@ async def create_dua_category_route(
     except pymongo.errors.DuplicateKeyError:
         raise HTTPException(status_code=400, detail="Category with this name already exists")
     
-    return CategoryRead(**created)
+    return CategoryRead(**created.model_dump())
 
 
 @router.post("/dua-categories/{category_id}/image-upload", response_model=None)

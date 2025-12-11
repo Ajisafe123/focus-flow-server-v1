@@ -32,7 +32,7 @@ async def send_email(subject: str, recipient: str, html_content: str):
             await smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
             print("SMTP: sending message...")
             response = await smtp.send_message(message)
-            print("SMTP: send complete")
+            print(f"SMTP: send completely successful to {recipient}")
             return response
 
     try:

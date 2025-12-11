@@ -57,7 +57,15 @@ async def get_dua(db: AsyncIOMotorDatabase, dua_id) -> Optional[DuaInDB]:
 async def get_all_duas(db: AsyncIOMotorDatabase) -> List[DuaInDB]:
     """Get all duas"""
     duas = await db["duas"].find().to_list(None)
-    return [DuaInDB(**dua) for dua in duas]
+    
+    # Sanitize bad data
+    sanitized_duas = []
+    for dua in duas:
+        if dua.get("category_id") == "undefined":
+            dua["category_id"] = None
+        sanitized_duas.append(dua)
+
+    return [DuaInDB(**dua) for dua in sanitized_duas]
 
 
 async def get_duas_by_category_id(db: AsyncIOMotorDatabase, category_id) -> List[DuaInDB]:
@@ -72,7 +80,15 @@ async def get_duas_by_category_id(db: AsyncIOMotorDatabase, category_id) -> List
 async def get_all_duas_with_counts(db: AsyncIOMotorDatabase) -> Tuple[List[DuaInDB], dict, dict]:
     """Get all duas with view and favorite counts"""
     duas = await db["duas"].find().to_list(None)
-    duas_list = [DuaInDB(**dua) for dua in duas]
+    
+    # Sanitize bad data (undefined category_id)
+    sanitized_duas = []
+    for dua in duas:
+        if dua.get("category_id") == "undefined":
+            dua["category_id"] = None
+        sanitized_duas.append(dua)
+
+    duas_list = [DuaInDB(**dua) for dua in sanitized_duas]
     dua_ids = [dua.id for dua in duas_list]
     
     views_map = await get_views_bulk(db, dua_ids)
@@ -121,7 +137,14 @@ async def get_paginated_duas(
     skip = (page - 1) * limit
     duas = await db["duas"].find(query).sort(sort_key, sort_direction).skip(skip).limit(limit).to_list(None)
     
-    duas_list = [DuaInDB(**dua) for dua in duas]
+    # Sanitize bad data
+    sanitized_duas = []
+    for dua in duas:
+        if dua.get("category_id") == "undefined":
+            dua["category_id"] = None
+        sanitized_duas.append(dua)
+
+    duas_list = [DuaInDB(**dua) for dua in sanitized_duas]
     dua_ids = [dua.id for dua in duas_list]
     
     return duas_list, dua_ids

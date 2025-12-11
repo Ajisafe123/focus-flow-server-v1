@@ -44,7 +44,7 @@ async def create_notifications(
             "recipient_role": recipient_role,
             "link": link,
             "read": False,
-            "created_at": now.isoformat(),
+            "created_at": now.isoformat() + "Z",
         }
         await manager.broadcast_room(room, {"event": "notification", "data": payload})
         return [payload]
@@ -72,7 +72,7 @@ async def create_notifications(
             "user_id": uid,
             "link": link,
             "read": False,
-            "created_at": now.isoformat(),
+            "created_at": now.isoformat() + "Z",
         }
         room = f"notifications:{uid}" if uid else "notifications:all"
         inserted.append(payload)

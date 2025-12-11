@@ -58,16 +58,17 @@ async def hadith_of_day(db: AsyncIOMotorDatabase = Depends(get_db)):
 @router.get("/hadiths", response_model=None)
 async def list_hadiths(db: AsyncIOMotorDatabase = Depends(get_db)):
     hadiths = await crud_hadith.get_all_hadiths(db)
-    hadith_ids = [h["_id"] for h in hadiths]
+    hadith_ids = [h.id for h in hadiths]
     
     views_map = await crud_hadith.get_views_bulk(db, hadith_ids)
     favorites_map = await crud_hadith.get_favorites_bulk(db, hadith_ids)
 
     hadiths_with_counts = []
     for h in hadiths:
-        h["view_count"] = views_map.get(str(h["_id"]), 0)
-        h["favorite_count"] = favorites_map.get(str(h["_id"]), 0)
-        hadiths_with_counts.append(HadithRead(**h))
+        h_dict = h.model_dump(by_alias=True)
+        h_dict["view_count"] = views_map.get(str(h.id), 0)
+        h_dict["favorite_count"] = favorites_map.get(str(h.id), 0)
+        hadiths_with_counts.append(HadithRead(**h_dict))
         
     return hadiths_with_counts
 
@@ -95,10 +96,11 @@ async def list_hadiths_paginated(
     
     hadiths_with_counts = []
     for h in hadiths:
-        h["view_count"] = views_map.get(str(h["_id"]), 0)
-        h["favorite_count"] = favorites_map.get(str(h["_id"]), 0)
-        h["is_favorite"] = str(h["_id"]) in user_favorites_set
-        hadiths_with_counts.append(HadithRead(**h))
+        h_dict = h.model_dump(by_alias=True)
+        h_dict["view_count"] = views_map.get(str(h.id), 0)
+        h_dict["favorite_count"] = favorites_map.get(str(h.id), 0)
+        h_dict["is_favorite"] = str(h.id) in user_favorites_set
+        hadiths_with_counts.append(HadithRead(**h_dict))
 
     total_count = await crud_hadith.count_hadiths(db, q, category_id, featured)
 

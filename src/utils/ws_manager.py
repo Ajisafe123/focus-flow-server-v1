@@ -53,7 +53,7 @@ class ConnectionManager:
         await websocket.send_json(message)
 
     async def broadcast_to_admins(self, message: Any):
-        # print(f"WS DEBUG: Broadcasting to {len(self.admin_connections)} admins: {message}")
+        print(f"WS DEBUG: Broadcasting to {len(self.admin_connections)} admins: {message}")
         for conn in list(self.admin_connections):
             try:
                 await conn.send_json(message)
@@ -62,7 +62,7 @@ class ConnectionManager:
                 pass
 
     async def broadcast_room(self, room: str, message: Any):
-        # print(f"WS DEBUG: Broadcasting to room {room}: {message}")
+        print(f"WS DEBUG: Broadcasting to room {room}: {message}")
         conns = self.active_connections.get(room, set())
         for conn in list(conns):
             try:
