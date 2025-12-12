@@ -51,7 +51,7 @@ class DuaBase(BaseModel):
     notes: Optional[str] = None
     benefits: Optional[str] = None
     source: Optional[str] = None
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     is_active: Optional[bool] = True
     featured: Optional[bool] = False
 
@@ -90,7 +90,7 @@ class DuaUpdate(BaseModel):
     notes: Optional[str] = None
     benefits: Optional[str] = None
     source: Optional[str] = None
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     is_active: Optional[bool] = None
     featured: Optional[bool] = None
 

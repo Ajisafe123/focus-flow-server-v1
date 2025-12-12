@@ -121,6 +121,9 @@ async def toggle_featured(db: AsyncIOMotorDatabase, article_id) -> Optional[Arti
     )
     
     updated_article = await db["articles"].find_one({"_id": article_id})
+    if "category_id" in updated_article and updated_article["category_id"]:
+        if isinstance(updated_article["category_id"], str) and not ObjectId.is_valid(updated_article["category_id"]):
+            updated_article["category_id"] = None
     return ArticleInDB(**updated_article)
 
 
@@ -231,16 +234,31 @@ async def get_user_favorites_set(db: AsyncIOMotorDatabase, user_id, article_ids:
 async def get_all_articles(db: AsyncIOMotorDatabase) -> List[ArticleInDB]:
     """Get all articles"""
     articles = await db["articles"].find().to_list(None)
-    return [ArticleInDB(**article) for article in articles]
+    articles_list = []
+    for article in articles:
+        if "category_id" in article and article["category_id"]:
+            if isinstance(article["category_id"], str) and not ObjectId.is_valid(article["category_id"]):
+                article["category_id"] = None
+        articles_list.append(ArticleInDB(**article))
+    return articles_list
 
 
 async def get_articles_by_category_id(db: AsyncIOMotorDatabase, category_id) -> List[ArticleInDB]:
     """Get all articles in a specific category"""
-    if isinstance(category_id, str):
-        category_id = ObjectId(category_id)
+    query = {}
+    if isinstance(category_id, str) and ObjectId.is_valid(category_id):
+        query["category_id"] = ObjectId(category_id)
+    else:
+        query["category_id"] = category_id
     
-    articles = await db["articles"].find({"category_id": category_id}).sort("_id", -1).to_list(None)
-    return [ArticleInDB(**article) for article in articles]
+    articles = await db["articles"].find(query).sort("_id", -1).to_list(None)
+    articles_list = []
+    for article in articles:
+        if "category_id" in article and article["category_id"]:
+            if isinstance(article["category_id"], str) and not ObjectId.is_valid(article["category_id"]):
+                article["category_id"] = None
+        articles_list.append(ArticleInDB(**article))
+    return articles_list
 
 
 async def get_paginated_articles(
@@ -265,9 +283,10 @@ async def get_paginated_articles(
         ]
     
     if category_id:
-        if isinstance(category_id, str):
-            category_id = ObjectId(category_id)
-        query["category_id"] = category_id
+        if isinstance(category_id, str) and ObjectId.is_valid(category_id):
+            query["category_id"] = ObjectId(category_id)
+        else:
+            query["category_id"] = category_id
     
     if featured is not None:
         query["featured"] = featured
@@ -280,7 +299,14 @@ async def get_paginated_articles(
     skip = (page - 1) * limit
     articles = await db["articles"].find(query).sort(sort_key, sort_direction).skip(skip).limit(limit).to_list(None)
     
-    articles_list = [ArticleInDB(**article) for article in articles]
+    # Clean up invalid category_id values before validation
+    articles_list = []
+    for article in articles:
+        if "category_id" in article and article["category_id"]:
+            if isinstance(article["category_id"], str) and not ObjectId.is_valid(article["category_id"]):
+                article["category_id"] = None
+        articles_list.append(ArticleInDB(**article))
+    
     article_ids = [article.id for article in articles_list]
     
     return articles_list, article_ids

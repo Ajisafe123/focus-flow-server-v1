@@ -5,6 +5,7 @@ from typing import Optional
 from datetime import datetime
 from ..database import get_db
 from ..utils.users import get_password_hash, get_current_user
+from ..models.mongo_models import convert_objectid_to_str
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -59,7 +60,7 @@ async def list_regular_users(
             "reset_codes_count": reset_count,
             "hashed_password": u.get("hashed_password")
         })
-    return {"total": total, "limit": limit, "offset": offset, "users": out}
+    return convert_objectid_to_str({"total": total, "limit": limit, "offset": offset, "users": out})
 
 
 @router.get("/users/stats", response_model=None)

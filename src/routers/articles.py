@@ -37,9 +37,10 @@ async def list_articles(db: AsyncIOMotorDatabase = Depends(get_db)):
 
     articles_with_counts = []
     for article in articles:
-        article.view_count = views_map.get(str(article.id), 0)
-        article.favorite_count = favorites_map.get(str(article.id), 0)
-        articles_with_counts.append(article)
+        article_dict = article.model_dump()
+        article_dict["view_count"] = views_map.get(str(article.id), 0)
+        article_dict["favorite_count"] = favorites_map.get(str(article.id), 0)
+        articles_with_counts.append(article_dict)
         
     return articles_with_counts
 
@@ -70,10 +71,11 @@ async def list_articles_paginated(
     
     articles_with_counts = []
     for article in articles:
-        article.view_count = views_map.get(str(article.id), 0)
-        article.favorite_count = favorites_map.get(str(article.id), 0)
-        article.is_favorite = str(article.id) in user_favorites_set
-        articles_with_counts.append(article)
+        article_dict = article.model_dump()
+        article_dict["view_count"] = views_map.get(str(article.id), 0)
+        article_dict["favorite_count"] = favorites_map.get(str(article.id), 0)
+        article_dict["is_favorite"] = str(article.id) in user_favorites_set
+        articles_with_counts.append(article_dict)
 
     return articles_with_counts
 
@@ -108,23 +110,26 @@ async def get_articles_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     views_map = await crud_article.get_views_bulk(db, article_ids)
     favorites_map = await crud_article.get_favorites_bulk(db, article_ids)
 
+    articles_with_counts = []
     for article in all_articles:
-        article.view_count = views_map.get(str(article.id), 0)
-        article.favorite_count = favorites_map.get(str(article.id), 0)
+        article_dict = article.model_dump()
+        article_dict["view_count"] = views_map.get(str(article.id), 0)
+        article_dict["favorite_count"] = favorites_map.get(str(article.id), 0)
+        articles_with_counts.append(article_dict)
 
-    total_views = sum(article.view_count for article in all_articles)
-    total_favorites = sum(article.favorite_count for article in all_articles)
+    total_views = sum(a["view_count"] for a in articles_with_counts)
+    total_favorites = sum(a["favorite_count"] for a in articles_with_counts)
 
-    featured_articles = [a for a in all_articles if a.featured]
+    featured_articles = [a for a in articles_with_counts if a["featured"]]
 
     def safe_article_item(a):
         return ArticleItem(
-            id=a.id,
-            title=a.title or "No Title"
+            id=a["id"],
+            title=a["title"] or "No Title"
         )
 
-    top_featured = sorted(featured_articles, key=lambda a: a.view_count, reverse=True)[:5]
-    top_viewed = sorted(all_articles, key=lambda a: a.view_count, reverse=True)[:5]
+    top_featured = sorted(featured_articles, key=lambda a: a["view_count"], reverse=True)[:5]
+    top_viewed = sorted(articles_with_counts, key=lambda a: a["view_count"], reverse=True)[:5]
 
     return ArticleStats(
         total_articles=total_articles,
@@ -162,10 +167,11 @@ async def get_article_route(article_id: str, db: AsyncIOMotorDatabase = Depends(
     # Increment view
     await crud_article.increment_view(db, article_id)
     
-    article.view_count = await crud_article.get_views_count(db, article_id)
-    article.favorite_count = await crud_article.get_favorites_count(db, article_id)
+    article_dict = article.model_dump()
+    article_dict["view_count"] = await crud_article.get_views_count(db, article_id)
+    article_dict["favorite_count"] = await crud_article.get_favorites_count(db, article_id)
     
-    return article
+    return article_dict
 
 
 @router.put("/articles/{article_id}", response_model=None)

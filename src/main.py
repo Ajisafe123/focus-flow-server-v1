@@ -2,13 +2,31 @@ import os
 import logging
 import traceback
 import asyncio
+import json
+from json import JSONEncoder
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from bson import ObjectId
 
 from .config import settings
 from . import database
 from .database import init_db
+
+
+class CustomJSONEncoder(JSONEncoder):
+    """Custom JSON encoder that handles ObjectId serialization"""
+    def default(self, o):
+        if isinstance(o, ObjectId):
+            return str(o)
+        return super().default(o)
+
+
+class CustomJSONResponse(JSONResponse):
+    """Custom JSON response that uses our ObjectId-aware encoder"""
+    def render(self, content):
+        return json.dumps(content, cls=CustomJSONEncoder, ensure_ascii=False).encode("utf-8")
 from src.routers import (
     prayer_routes,
     allah_names,
@@ -35,12 +53,16 @@ from src.routers import (
     donations,
 )
 from src.services.prayer_service import get_prayer_times, DEFAULT_LAT, DEFAULT_LON
+from fastapi.responses import JSONResponse
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 app = FastAPI(
     title="Focus Flow API",
     description="Authentication + Prayer Times API (No Weather)",
     version="1.2.1",
     debug=(settings.ENVIRONMENT == "development"),
+    default_response_class=CustomJSONResponse,
 )
 app.add_middleware(
     CORSMiddleware,

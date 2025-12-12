@@ -27,7 +27,7 @@ class HadithBase(BaseModel):
     number: Optional[str] = None
     status: Optional[str] = None
     rating: Optional[float] = None
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     is_active: Optional[bool] = True
     featured: Optional[bool] = False
 
@@ -48,7 +48,7 @@ class HadithUpdate(BaseModel):
     number: Optional[str] = None
     status: Optional[str] = None
     rating: Optional[float] = None
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     is_active: Optional[bool] = None
     featured: Optional[bool] = None
 

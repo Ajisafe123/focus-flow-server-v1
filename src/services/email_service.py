@@ -75,12 +75,6 @@ async def send_contact_notification(message_data, recipient: str = settings.EMAI
 
 async def send_login_notification(email: str):
     """Send a brief login notice to the user."""
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; padding: 16px;">
-      <h2>Login Notification</h2>
-      <p>We noticed a new sign-in to your Nibras Al-Deen account.</p>
-      <p>If this was you, no action is needed. If not, please reset your password.</p>
-      <p style="color: #0f5132;">Time: {datetime.utcnow().isoformat()} UTC</p>
-    </div>
-    """
-    await send_email("You just signed in", email, html_content)
+    template = env.get_template("login_notification.html")
+    html_content = template.render(timestamp=datetime.utcnow().isoformat() + " UTC")
+    await send_email("Login Notification - Nibras Al-Deen", email, html_content)

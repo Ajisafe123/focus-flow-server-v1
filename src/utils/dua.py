@@ -59,13 +59,16 @@ async def get_all_duas(db: AsyncIOMotorDatabase) -> List[DuaInDB]:
     duas = await db["duas"].find().to_list(None)
     
     # Sanitize bad data
-    sanitized_duas = []
+    duas_list = []
     for dua in duas:
         if dua.get("category_id") == "undefined":
             dua["category_id"] = None
-        sanitized_duas.append(dua)
+        if "category_id" in dua and dua["category_id"]:
+            if isinstance(dua["category_id"], str) and not ObjectId.is_valid(dua["category_id"]):
+                dua["category_id"] = None
+        duas_list.append(DuaInDB(**dua))
 
-    return [DuaInDB(**dua) for dua in sanitized_duas]
+    return duas_list
 
 
 async def get_duas_by_category_id(db: AsyncIOMotorDatabase, category_id) -> List[DuaInDB]:
@@ -74,7 +77,13 @@ async def get_duas_by_category_id(db: AsyncIOMotorDatabase, category_id) -> List
         category_id = ObjectId(category_id)
     
     duas = await db["duas"].find({"category_id": category_id}).sort("_id", 1).to_list(None)
-    return [DuaInDB(**dua) for dua in duas]
+    duas_list = []
+    for dua in duas:
+        if "category_id" in dua and dua["category_id"]:
+            if isinstance(dua["category_id"], str) and not ObjectId.is_valid(dua["category_id"]):
+                dua["category_id"] = None
+        duas_list.append(DuaInDB(**dua))
+    return duas_list
 
 
 async def get_all_duas_with_counts(db: AsyncIOMotorDatabase) -> Tuple[List[DuaInDB], dict, dict]:
@@ -82,13 +91,15 @@ async def get_all_duas_with_counts(db: AsyncIOMotorDatabase) -> Tuple[List[DuaIn
     duas = await db["duas"].find().to_list(None)
     
     # Sanitize bad data (undefined category_id)
-    sanitized_duas = []
+    duas_list = []
     for dua in duas:
         if dua.get("category_id") == "undefined":
             dua["category_id"] = None
-        sanitized_duas.append(dua)
+        if "category_id" in dua and dua["category_id"]:
+            if isinstance(dua["category_id"], str) and not ObjectId.is_valid(dua["category_id"]):
+                dua["category_id"] = None
+        duas_list.append(DuaInDB(**dua))
 
-    duas_list = [DuaInDB(**dua) for dua in sanitized_duas]
     dua_ids = [dua.id for dua in duas_list]
     
     views_map = await get_views_bulk(db, dua_ids)
@@ -138,13 +149,15 @@ async def get_paginated_duas(
     duas = await db["duas"].find(query).sort(sort_key, sort_direction).skip(skip).limit(limit).to_list(None)
     
     # Sanitize bad data
-    sanitized_duas = []
+    duas_list = []
     for dua in duas:
         if dua.get("category_id") == "undefined":
             dua["category_id"] = None
-        sanitized_duas.append(dua)
+        if "category_id" in dua and dua["category_id"]:
+            if isinstance(dua["category_id"], str) and not ObjectId.is_valid(dua["category_id"]):
+                dua["category_id"] = None
+        duas_list.append(DuaInDB(**dua))
 
-    duas_list = [DuaInDB(**dua) for dua in sanitized_duas]
     dua_ids = [dua.id for dua in duas_list]
     
     return duas_list, dua_ids
@@ -154,6 +167,12 @@ async def create_dua(db: AsyncIOMotorDatabase, dua_data: dict) -> DuaInDB:
     """Create a new dua"""
     dua_data["created_at"] = datetime.utcnow()
     dua_data["updated_at"] = datetime.utcnow()
+    
+    # Handle category_id - if it's not a valid ObjectId, set to None
+    if "category_id" in dua_data and dua_data["category_id"]:
+        category_id = dua_data["category_id"]
+        if isinstance(category_id, str) and not ObjectId.is_valid(category_id):
+            dua_data["category_id"] = None
     
     result = await db["duas"].insert_one(dua_data)
     dua_data["_id"] = result.inserted_id

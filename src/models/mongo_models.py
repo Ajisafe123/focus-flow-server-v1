@@ -1,26 +1,57 @@
 """MongoDB Models using Pydantic"""
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field, GetJsonSchemaHandler, field_validator, field_serializer
+from pydantic_core import core_schema
+from typing import Optional, List, Dict, Any, Annotated
 from datetime import datetime
 from bson import ObjectId
+import json
 
 
-class PyObjectId(ObjectId):
+class PyObjectId(str):
+    """Custom type for MongoDB ObjectId that serializes to string"""
+    
     @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
+    def __get_pydantic_core_schema__(cls, source_type: Any, handler) -> core_schema.CoreSchema:
+        return core_schema.no_info_after_validator_function(
+            cls.validate,
+            core_schema.union_schema([
+                core_schema.is_instance_schema(ObjectId),
+                core_schema.str_schema(),
+            ]),
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                lambda v: str(v) if isinstance(v, ObjectId) else v,
+                return_schema=core_schema.str_schema(),
+            ),
+        )
 
     @classmethod
-    def validate(cls, v, info: Optional[Any] = None):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid objectid")
-        return ObjectId(v)
+    def validate(cls, v):
+        if v is None or v == "":
+            return None
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str):
+            if not ObjectId.is_valid(v):
+                raise ValueError("Invalid objectid")
+            return v
+        raise ValueError("Invalid objectid type")
 
     @classmethod
-    def __get_pydantic_json_schema__(cls, schema: Dict[str, Any], model_type) -> Dict[str, Any]:
-        json_schema = super().__get_pydantic_json_schema__(schema, model_type)
-        json_schema = {**json_schema, "examples": ["507f1f77bcf86cd799439011"]}
+    def __get_pydantic_json_schema__(cls, schema: Dict[str, Any], handler: GetJsonSchemaHandler) -> Dict[str, Any]:
+        json_schema = handler(schema)
+        json_schema = {**json_schema, "examples": ["507f1f77bcf86cd799439011"], "type": "string"}
         return json_schema
+
+
+def convert_objectid_to_str(obj):
+    """Recursively convert ObjectId instances to strings in dictionaries and lists"""
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_objectid_to_str(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_objectid_to_str(item) for item in obj]
+    return obj
 
 
 # User Models
@@ -72,7 +103,7 @@ class DuaInDB(BaseModel):
     notes: Optional[str] = None
     benefits: Optional[str] = None
     source: Optional[str] = None
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     audio_path: Optional[str] = None
     is_active: bool = True
     featured: bool = False
@@ -81,6 +112,7 @@ class DuaInDB(BaseModel):
     translation_segments_json: Optional[List[Dict]] = None
     view_count: int = 0
     favorite_count: int = 0
+    is_favorite: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -139,11 +171,12 @@ class HadithInDB(BaseModel):
     number: Optional[str] = None
     status: Optional[str] = None
     rating: float = 0.0
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     is_active: bool = True
     featured: bool = False
     view_count: int = 0
     favorite_count: int = 0
+    is_favorite: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -190,12 +223,13 @@ class ArticleInDB(BaseModel):
     content: str
     excerpt: Optional[str] = None
     author: Optional[str] = None
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     cover_image_url: Optional[str] = None
     is_active: bool = True
     featured: bool = False
     view_count: int = 0
     favorite_count: int = 0
+    is_favorite: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -244,7 +278,7 @@ class ProductInDB(BaseModel):
     price: float
     currency: str = "USD"
     image_urls: List[str] = []
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     is_active: bool = True
     stock_quantity: int = 0
     created_at: datetime = Field(default_factory=datetime.utcnow)

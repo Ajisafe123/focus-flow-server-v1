@@ -36,6 +36,12 @@ async def update_hadith(db: AsyncIOMotorDatabase, hadith_id, hadith_data: dict) 
     
     hadith_data["updated_at"] = datetime.utcnow()
     
+    # Handle category_id - if it's not a valid ObjectId, set to None
+    if "category_id" in hadith_data and hadith_data["category_id"]:
+        category_id = hadith_data["category_id"]
+        if isinstance(category_id, str) and not ObjectId.is_valid(category_id):
+            hadith_data["category_id"] = None
+    
     result = await db["hadiths"].update_one(
         {"_id": hadith_id},
         {"$set": hadith_data}
@@ -271,7 +277,12 @@ async def get_paginated_hadiths(
     skip = (page - 1) * limit
     hadiths = await db["hadiths"].find(query).sort(sort_key, sort_direction).skip(skip).limit(limit).to_list(None)
     
-    hadiths_list = [HadithInDB(**hadith) for hadith in hadiths]
+    hadiths_list = []
+    for hadith in hadiths:
+        if "category_id" in hadith and hadith["category_id"]:
+            if isinstance(hadith["category_id"], str) and not ObjectId.is_valid(hadith["category_id"]):
+                hadith["category_id"] = None
+        hadiths_list.append(HadithInDB(**hadith))
     hadith_ids = [hadith.id for hadith in hadiths_list]
     
     return hadiths_list, hadith_ids

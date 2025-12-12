@@ -12,15 +12,18 @@ class PyObjectId(str):
 
     @classmethod
     def validate(cls, v, info=None):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid objectid")
-        return str(ObjectId(v))
+        if v is None:
+            return None
+        try:
+            if isinstance(v, str) and ObjectId.is_valid(v):
+                return str(ObjectId(v))
+            return str(v)
+        except:
+            return str(v)
 
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema, handler):
         return {"type": "string"}
-
-
 
 class ArticleItem(BaseModel):
     id: PyObjectId = Field(alias="_id")
@@ -69,7 +72,7 @@ class ArticleBase(BaseModel):
     content: str
     excerpt: Optional[str] = None
     author: Optional[str] = None
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     cover_image_url: Optional[str] = None
     is_active: bool = True
     featured: bool = False
@@ -88,7 +91,7 @@ class ArticleUpdate(BaseModel):
     content: Optional[str] = None
     excerpt: Optional[str] = None
     author: Optional[str] = None
-    category_id: Optional[PyObjectId] = None
+    category_id: Optional[str] = None
     cover_image_url: Optional[str] = None
     is_active: Optional[bool] = None
     featured: Optional[bool] = None
