@@ -164,7 +164,7 @@ class HadithCategoryInDB(BaseModel):
 
 class HadithInDB(BaseModel):
     id: Optional[PyObjectId] = Field(alias="_id")
-    arabic: str
+    arabic: Optional[str] = None
     translation: Optional[str] = None
     narrator: Optional[str] = None
     book: Optional[str] = None
@@ -229,6 +229,7 @@ class ArticleInDB(BaseModel):
     featured: bool = False
     view_count: int = 0
     favorite_count: int = 0
+    share_count: int = 0
     is_favorite: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

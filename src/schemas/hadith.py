@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from bson import ObjectId
 
 
@@ -20,9 +20,10 @@ class PyObjectId(str):
 
 
 class HadithBase(BaseModel):
-    arabic: str
+    arabic: Optional[str] = None
     translation: Optional[str] = None
     narrator: Optional[str] = None
+    english: Optional[Dict[str, Any]] = None
     book: Optional[str] = None
     number: Optional[str] = None
     status: Optional[str] = None
@@ -44,6 +45,7 @@ class HadithUpdate(BaseModel):
     arabic: Optional[str] = None
     translation: Optional[str] = None
     narrator: Optional[str] = None
+    english: Optional[Dict[str, Any]] = None
     book: Optional[str] = None
     number: Optional[str] = None
     status: Optional[str] = None

@@ -235,6 +235,28 @@ async def toggle_favorite_route(
     return {"id": article_id, "favorites": count}
 
 
+@router.post("/articles/{article_id}/share", response_model=None)
+async def share_article_route(
+    article_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Increment share count for an article"""
+    article = await crud_article.get_article(db, article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    success = await crud_article.increment_share(db, article_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to record share")
+    
+    # Return updated article with new share count
+    updated_article = await crud_article.get_article(db, article_id)
+    article_dict = updated_article.model_dump()
+    article_dict["share_count"] = article_dict.get("share_count", 0)
+    return article_dict
+
+
 @router.get("/article-categories", response_model=None)
 async def list_categories(db: AsyncIOMotorDatabase = Depends(get_db)):
     """Get all article categories"""

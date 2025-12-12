@@ -100,7 +100,7 @@ async def list_hadiths_paginated(
         h_dict["view_count"] = views_map.get(str(h.id), 0)
         h_dict["favorite_count"] = favorites_map.get(str(h.id), 0)
         h_dict["is_favorite"] = str(h.id) in user_favorites_set
-        hadiths_with_counts.append(HadithRead(**h_dict))
+        hadiths_with_counts.append(h_dict)
 
     total_count = await crud_hadith.count_hadiths(db, q, category_id, featured)
 
@@ -112,6 +112,17 @@ async def list_hadiths_paginated(
 @router.post("/hadiths", response_model=None)
 async def create_hadith_route(hadith_data: HadithCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     created = await crud_hadith.create_hadith(db, hadith_data.model_dump())
+    try:
+        await create_notifications(
+            db,
+            title="New Hadith Published",
+            message=f"A new authentic hadith has been added to the collection",
+            notif_type="info",
+            user_ids=None,
+            link=f"/hadiths?hadithId={created.id}",
+        )
+    except Exception:
+        pass
     return HadithRead(**created)
 
 @router.get("/hadiths/stats", response_model=None)
@@ -119,7 +130,7 @@ async def get_hadiths_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     all_hadiths = await crud_hadith.get_all_hadiths(db)
     
     total_hadiths = len(all_hadiths)
-    hadith_ids = [h["_id"] for h in all_hadiths]
+    hadith_ids = [h.id for h in all_hadiths]
 
     views_map = await crud_hadith.get_views_bulk(db, hadith_ids)
     favorites_map = await crud_hadith.get_favorites_bulk(db, hadith_ids)
@@ -127,24 +138,24 @@ async def get_hadiths_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
     total_views = sum(views_map.get(str(hid), 0) for hid in hadith_ids)
     total_favorites = sum(favorites_map.get(str(hid), 0) for hid in hadith_ids)
     
-    total_featured = sum(1 for h in all_hadiths if h.get("featured"))
+    total_featured = sum(1 for h in all_hadiths if h.featured)
     
-    featured_hadiths = [h for h in all_hadiths if h.get("featured")]
+    featured_hadiths = [h for h in all_hadiths if h.featured]
 
     def safe_hadith_item(h):
         return HadithItem(
-            id=h.get("_id"),
-            number=h.get("number") or "No Number"
+            id=h.id,
+            number=h.number or "No Number"
         )
 
     top_featured = sorted(
-        [(h, views_map.get(str(h["_id"]), 0)) for h in featured_hadiths],
+        [(h, views_map.get(str(h.id), 0)) for h in featured_hadiths],
         key=lambda x: x[1],
         reverse=True
     )[:5]
     
     top_viewed = sorted(
-        [(h, views_map.get(str(h["_id"]), 0)) for h in all_hadiths],
+        [(h, views_map.get(str(h.id), 0)) for h in all_hadiths],
         key=lambda x: x[1],
         reverse=True
     )[:5]
@@ -222,11 +233,19 @@ async def bulk_data_upload_route(
 
         elif file.content_type == "application/json":
             data = json.loads(file_content)
-            data_list = data if isinstance(data, list) else [data]
+            
+            # Handle nested structure with hadiths array
+            if isinstance(data, dict) and "hadiths" in data:
+                data_list = data["hadiths"]
+            elif isinstance(data, list):
+                data_list = data
+            else:
+                data_list = [data]
             
             for item in data_list:
-                item["category_id"] = category_id or item.get("category_id")
-                hadiths_to_create.append(item)
+                if item.get("arabic"):
+                    item["category_id"] = category_id or item.get("category_id")
+                    hadiths_to_create.append(item)
         
         inserted_ids = await crud_hadith.bulk_create_hadiths(db, hadiths_to_create)
         processed_count = len(inserted_ids)
@@ -377,7 +396,7 @@ async def toggle_favorite_route(
 @router.get("/hadith-categories", response_model=None)
 async def list_categories(db: AsyncIOMotorDatabase = Depends(get_db)):
     categories = await crud_hadith.get_all_categories(db)
-    return [HadithCategoryRead(**cat) for cat in categories]
+    return [cat.model_dump() for cat in categories]
 
 @router.post("/hadith-categories", response_model=None)
 async def create_category_route(

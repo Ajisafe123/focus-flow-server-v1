@@ -6,6 +6,7 @@ from email.message import EmailMessage
 import aiosmtplib
 from jinja2 import Environment, FileSystemLoader
 from src.config import settings
+import logging
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "../templates/email")
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
@@ -13,6 +14,16 @@ env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
 async def send_email(subject: str, recipient: str, html_content: str):
     """Send an email using Brevo SMTP."""
+    logger = logging.getLogger(__name__)
+    
+    # Check if SMTP credentials are configured
+    if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD or not settings.EMAIL_FROM:
+        error_msg = "❌ SMTP credentials not configured. Check environment variables: SMTP_USERNAME, SMTP_PASSWORD, EMAIL_FROM"
+        logger.error(error_msg)
+        print(error_msg)
+        raise ValueError(error_msg)
+    
+    logger.info(f"Sending email to {recipient} | Subject: {subject}")
     print(f"Sending email to {recipient} | Subject: {subject}")
     message = EmailMessage()
     message["From"] = f"Nibra Al-Deen <{settings.EMAIL_FROM}>"
@@ -28,24 +39,29 @@ async def send_email(subject: str, recipient: str, html_content: str):
             start_tls=True,
             timeout=60,
         ) as smtp:
+            logger.info(f"SMTP: Connected to {settings.SMTP_HOST}:{settings.SMTP_PORT}. Logging in...")
             print(f"SMTP: Connected to {settings.SMTP_HOST}:{settings.SMTP_PORT}. Logging in...")
             await smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+            logger.info("SMTP: sending message...")
             print("SMTP: sending message...")
             response = await smtp.send_message(message)
+            logger.info(f"SMTP: send completely successful to {recipient}")
             print(f"SMTP: send completely successful to {recipient}")
             return response
 
     try:
         # Hard cap total send time to 120s
         response = await asyncio.wait_for(_send(), timeout=120)
-        print("Brevo SMTP response:")
-        print(response)
+        logger.info(f"✅ Email sent successfully to {recipient}")
+        print(f"✅ Email sent successfully to {recipient}")
         return response
     except Exception as e:
-        import traceback
-        print(f"❌ FAILED sending email to {recipient}")
+        error_msg = f"❌ FAILED sending email to {recipient}: {str(e)}"
+        logger.error(error_msg)
+        logger.error(f"Error Type: {type(e).__name__}")
+        logger.error(f"Full Traceback: {traceback.format_exc()}")
+        print(error_msg)
         print(f"Error Type: {type(e).__name__}")
-        print(f"Error Message: {str(e)}")
         print("Full Traceback:")
         traceback.print_exc()
         raise

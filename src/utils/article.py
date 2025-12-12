@@ -197,6 +197,19 @@ async def get_favorites_count(db: AsyncIOMotorDatabase, article_id) -> int:
     return count
 
 
+async def increment_share(db: AsyncIOMotorDatabase, article_id) -> bool:
+    """Increment share count for an article"""
+    if isinstance(article_id, str):
+        article_id = ObjectId(article_id)
+    
+    result = await db["articles"].update_one(
+        {"_id": article_id},
+        {"$inc": {"share_count": 1}}
+    )
+    
+    return result.modified_count > 0
+
+
 async def get_favorites_bulk(db: AsyncIOMotorDatabase, article_ids: List) -> dict:
     """Get favorite counts for multiple articles"""
     if not article_ids:
