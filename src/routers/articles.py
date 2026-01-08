@@ -16,12 +16,10 @@ import shutil
 import uuid
 import pymongo.errors
 import os.path as op
+from ..utils.cloudinary_uploader import upload_bytes
 
 CURRENT_DIR = op.dirname(op.abspath(__file__))
 SRC_DIR = op.join(CURRENT_DIR, op.pardir)
-STATIC_DIR = op.join(SRC_DIR, "static")
-CATEGORY_IMAGE_DIR = op.join(STATIC_DIR, "article_images")
-os.makedirs(CATEGORY_IMAGE_DIR, exist_ok=True)
 
 router = APIRouter(prefix="/api", tags=["Articles"])
 
@@ -284,15 +282,17 @@ async def create_category_route(
         allowed_types = ["image/jpeg", "image/png", "image/webp"]
         if image_file.content_type in allowed_types:
             file_extension = op.splitext(image_file.filename)[1]
-            # Generate a temp ID (will be replaced by actual ID, but needed for filename uniqueness if we want)
-            # Better to use UUID for filename
-            unique_filename = f"category_{uuid.uuid4().hex}{file_extension}"
-            unique_image_path = op.join(CATEGORY_IMAGE_DIR, unique_filename)
-            
             try:
-                with open(unique_image_path, "wb") as buffer:
-                    shutil.copyfileobj(image_file.file, buffer)
-                category_data["image_url"] = f"/static/article_images/{unique_filename}"
+                filename = f"category_{uuid.uuid4().hex}{file_extension}"
+                contents = await image_file.read()
+                result = await upload_bytes(
+                    contents=contents,
+                    filename=filename,
+                    folder="articles/category_images",
+                    resource_type="image",
+                    content_type=image_file.content_type,
+                )
+                category_data["image_url"] = result.get("secure_url") or result.get("url")
             except Exception as e:
                 # Log error but proceed without image or raise? 
                 # Raise is safer to notify user
@@ -329,14 +329,20 @@ async def upload_category_image_route(
         )
         
     file_extension = op.splitext(image_file.filename)[1]
-    unique_filename = f"category_{category_id}_{uuid.uuid4().hex}{file_extension}"
-    unique_image_path = op.join(CATEGORY_IMAGE_DIR, unique_filename)
     
     try:
-        with open(unique_image_path, "wb") as buffer:
-            shutil.copyfileobj(image_file.file, buffer)
-
-        image_url = f"/static/article_images/{unique_filename}"
+        filename = f"category_{category_id}_{uuid.uuid4().hex}{file_extension}"
+        contents = await image_file.read()
+        result = await upload_bytes(
+            contents=contents,
+            filename=filename,
+            folder="articles/category_images",
+            resource_type="image",
+            content_type=image_file.content_type,
+        )
+        image_url = result.get("secure_url") or result.get("url")
+        if not image_url:
+            raise RuntimeError("Cloudinary did not return a URL")
 
         updated_category = await crud_article.update_category_image_url(
             db,
@@ -345,8 +351,6 @@ async def upload_category_image_route(
         )
         
     except Exception as e:
-        if op.exists(unique_image_path):
-            os.remove(unique_image_path)
         raise HTTPException(status_code=500, detail=f"Image processing or DB error: {str(e)}")
 
     return {

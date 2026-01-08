@@ -9,7 +9,7 @@ from typing import List, Optional
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-AUDIO_DIR = os.path.join(BASE_DIR, "static", "audio")
+AUDIO_DIR = None
 TAFSIR_CACHE = {}
 AUDIO_CACHE = {}
 TIMESTAMP_CACHE = {}
@@ -60,30 +60,9 @@ async def get_tafsir(ayah_key: str, tafsir_source: str):
         return data
 
 def list_reciters():
-    return os.listdir(AUDIO_DIR)
+    return []
 
 def get_audio(surah_number: int, reciter: str):
-    key = f"{surah_number}:{reciter}"
-    if key in AUDIO_CACHE:
-        return AUDIO_CACHE[key]
-    
-    reciter_folder = reciter.replace('.mp3', '') 
-    
-    surah_audio_path = os.path.join(AUDIO_DIR, reciter_folder, f"{surah_number}.mp3")
-    
-    full_surah_file_name = f"{reciter_folder}_Al-Afasy.mp3"
-    full_surah_audio_path = os.path.join(AUDIO_DIR, full_surah_file_name) 
-
-    if os.path.exists(full_surah_audio_path):
-        public_url = f"/static/audio/{full_surah_file_name}"
-        AUDIO_CACHE[key] = public_url
-        return public_url
-        
-    if os.path.exists(surah_audio_path):
-        public_url = f"/static/audio/{reciter_folder}/{surah_number}.mp3"
-        AUDIO_CACHE[key] = public_url
-        return public_url
-        
     return None
 
 def extract_translation(verse: dict) -> str:

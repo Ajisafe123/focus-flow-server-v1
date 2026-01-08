@@ -13,9 +13,10 @@ async def connect_to_mongo():
     """Establish MongoDB connection"""
     global client, db
     try:
+        timeout_ms = int(__import__("os").environ.get("MONGO_SERVER_SELECTION_TIMEOUT_MS", "20000"))
         client = motor.motor_asyncio.AsyncIOMotorClient(
             settings.DATABASE_URL,
-            serverSelectionTimeoutMS=5000,
+            serverSelectionTimeoutMS=timeout_ms,
             retryWrites=True,
             w="majority"
         )

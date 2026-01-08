@@ -7,7 +7,6 @@ from uuid import uuid4
 
 from ..database import get_db
 from ..schemas.message import MessageCreate, MessageOut
-from ..utils.s3_clients import upload_bytes_to_s3, generate_presigned_url
 from ..utils.ws_manager import manager
 
 router = APIRouter(prefix="/api/messages", tags=["Messages"])

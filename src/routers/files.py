@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from ..database import get_db
 from ..config import settings
-from ..utils.s3_clients import upload_bytes_to_s3, generate_presigned_url
+from ..utils.cloudinary_uploader import upload_bytes
 
 router = APIRouter(prefix="/api/files", tags=["Files"])
 
@@ -33,23 +33,20 @@ async def upload_file(
     filename = file.filename or f"upload-{uuid4().hex}"
     content_type = file.content_type or "application/octet-stream"
 
-    if settings.USE_S3:
-        try:
-            key = upload_bytes_to_s3(contents, filename, prefix="uploads", content_type=content_type)
-            presigned_url = generate_presigned_url(key, expires_in=60 * 60 * 24)
-            file_url = presigned_url
-            s3_key = key
-        except Exception as e:
-            raise HTTPException(status_code=500, detail="S3 upload failed")
-    else:
-        upload_dir = settings.FILE_UPLOAD_DIR
-        os.makedirs(upload_dir, exist_ok=True)
-        save_name = f"{uuid4().hex}_{filename}"
-        path = os.path.join(upload_dir, save_name)
-        with open(path, "wb") as f:
-            f.write(contents)
-        file_url = f"/files/{save_name}"
-        s3_key = None
+    try:
+        result = await upload_bytes(
+            contents=contents,
+            filename=filename,
+            folder="uploads",
+            resource_type="auto",
+            content_type=content_type,
+        )
+        file_url = result.get("secure_url") or result.get("url")
+        if not file_url:
+            raise RuntimeError("Cloudinary did not return a URL")
+        cloudinary_public_id = result.get("public_id")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Cloudinary upload failed")
 
     file_record = {
         "message_id": messageId,
@@ -57,10 +54,11 @@ async def upload_file(
         "file_type": content_type,
         "file_size": size,
         "file_url": file_url,
+        "cloudinary_public_id": cloudinary_public_id,
         "uploaded_at": datetime.utcnow().isoformat()
     }
     
     files_collection = db["files"]
     result = await files_collection.insert_one(file_record)
 
-    return {"fileUrl": file_url, "fileId": str(result.inserted_id), "s3_key": s3_key}
+    return {"fileUrl": file_url, "fileId": str(result.inserted_id), "cloudinary_public_id": cloudinary_public_id}

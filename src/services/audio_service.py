@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Optional
 from ..config import settings
 
-AUDIO_ROOT = Path(settings.AUDIO_STORAGE_PATH)
+AUDIO_ROOT = None
 
 def resolve_audio_path(dua_audio_map: dict, reciter: str) -> Optional[Path]:
     if not dua_audio_map:
@@ -13,6 +13,9 @@ def resolve_audio_path(dua_audio_map: dict, reciter: str) -> Optional[Path]:
         return None
 
     if candidate.startswith("http://") or candidate.startswith("https://"):
+        return None
+
+    if AUDIO_ROOT is None:
         return None
 
     p = Path(candidate)

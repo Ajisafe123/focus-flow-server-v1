@@ -6,7 +6,6 @@ import json
 from json import JSONEncoder
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 
@@ -79,15 +78,6 @@ async def log_exceptions(request, call_next):
         logging.error("UNCAUGHT EXCEPTION", exc_info=e)
         traceback.print_exc()
         raise e
-BASE_DIR = os.path.dirname(__file__)
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-UPLOAD_DIR = os.path.join(STATIC_DIR, "uploads")
-AUDIO_DIR = os.path.join(STATIC_DIR, "audio")
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(AUDIO_DIR, exist_ok=True)
-
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(users.router)
 app.include_router(prayer_routes.router)
 app.include_router(allah_names.router)

@@ -22,13 +22,9 @@ class Settings(BaseSettings):
     RESET_TOKEN_EXPIRE_MINUTES: int
     PORT: int = 3001
     BACKEND_CORS_ORIGINS: List[str]
-    FILE_UPLOAD_DIR: str = "./static./uploads"
-    AUDIO_STORAGE_PATH: Path = Field(BASE_DIR / "static" / "audio", env="AUDIO_STORAGE_PATH")
-    USE_S3: bool = False
-    AWS_ACCESS_KEY_ID: Optional[str] = None
-    AWS_SECRET_ACCESS_KEY: Optional[str] = None
-    AWS_S3_BUCKET: Optional[str] = None
-    AWS_REGION: str = "us-east-1"
+    CLOUDINARY_CLOUD_NAME: Optional[str] = None
+    CLOUDINARY_API_KEY: Optional[str] = None
+    CLOUDINARY_API_SECRET: Optional[str] = None
     # SMTP email (Brevo) – configure via environment variables
     SMTP_HOST: str = Field("smtp-relay.brevo.com", env="SMTP_HOST")
     SMTP_PORT: int = Field(587, env="SMTP_PORT")

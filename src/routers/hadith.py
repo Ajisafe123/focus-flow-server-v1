@@ -19,6 +19,7 @@ import shutil
 import uuid
 import pymongo.errors
 import os.path as op
+from ..utils.cloudinary_uploader import upload_bytes
 
 HadithSchema = HadithRead 
 cache: Dict[str, Any] = {}
@@ -418,42 +419,20 @@ async def create_category_route(
     if image_file:
         allowed_types = ["image/jpeg", "image/png", "image/webp"]
         if image_file.content_type in allowed_types:
-            # Re-use the existing category_images dir. Hadiths might share it or need their own.
-            # Assuming 'article_images' or 'category_images' is available. 
-            # Ideally each router should manage its own text/paths, but let's use a generic approach if possible.
-            # Hadith router in this file doesn't have CATEGORY_IMAGE_DIR defined top-level?
-            # Let's check imports. It imports 'os' and 'op'. 
-            # We need to define a path. 
-            # Let's assume static/hadith_category_images similar to others or reuse one.
-            # Checking imports in hadith.py... it doesn't define directories like articles.py/duas.py do.
-            # We'll need to define it or piggyback.
-            # Safest is to define it locally in the function or top level.
-            pass
-
-    # Quick fix: Hadith router lines 1-28 doesn't show directory setup. 
-    # I'll add directory setup to this block or rely on existing?
-    # I'll just skip image handling for Hadith for now if directories aren't set up, 
-    # BUT wait, the frontend sends it. 
-    # Let's check if I can define the directory.
-    
-    current_dir = op.dirname(op.abspath(__file__))
-    src_dir = op.join(current_dir, op.pardir)
-    static_dir = op.join(src_dir, "static")
-    cat_img_dir = op.join(static_dir, "hadith_category_images")
-    os.makedirs(cat_img_dir, exist_ok=True)
-
-    if image_file:
-        allowed_types = ["image/jpeg", "image/png", "image/webp"]
-        if image_file.content_type in allowed_types:
             file_extension = op.splitext(image_file.filename)[1]
-            unique_filename = f"cat_hadith_{uuid.uuid4().hex}{file_extension}"
-            unique_image_path = op.join(cat_img_dir, unique_filename)
             try:
-                 with open(unique_image_path, "wb") as buffer:
-                    shutil.copyfileobj(image_file.file, buffer)
-                 category_data["image_url"] = f"/static/hadith_category_images/{unique_filename}"
-            except Exception:
-                 pass
+                filename = f"cat_hadith_{uuid.uuid4().hex}{file_extension}"
+                contents = await image_file.read()
+                result = await upload_bytes(
+                    contents=contents,
+                    filename=filename,
+                    folder="hadith/category_images",
+                    resource_type="image",
+                    content_type=image_file.content_type,
+                )
+                category_data["image_url"] = result.get("secure_url") or result.get("url")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
 
     try:
         created = await crud_hadith.create_category(db, category_data)

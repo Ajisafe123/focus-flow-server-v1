@@ -11,9 +11,9 @@ pydantic-settings
 typing_extensions
 python-dotenv
 pydantic[email]
+cloudinary
 aiosmtplib
 jinja2
-boto3
 hijri-converter
 requests
 httpx
